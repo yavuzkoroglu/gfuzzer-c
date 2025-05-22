@@ -1,0 +1,5 @@
+<number>    ::= <zero> | <nonzero> <digit-seq>
+<digit-seq> ::= <digit> | <digit> <digit-seq>
+<digit>     ::= <zero> | <nonzero>
+<nonzero>   ::= '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9'
+<zero>      ::= '0'

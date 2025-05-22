@@ -1,0 +1,37 @@
+digraph rainwatertank {
+    init0 [label="",shape="none",width=0,height=0];
+    init1 [label="",shape="none",width=0,height=0];
+    init6 [label="",shape="none",width=0,height=0];
+    init7 [label="",shape="none",width=0,height=0];
+    node [shape="circle"];
+    s0 [label="0,0,0"];
+    s1 [label="0,0,1"];
+    s2 [label="0,1,0"];
+    s3 [label="0,1,1"];
+    s6 [label="1,1,0"];
+    s7 [label="1,1,1"];
+    init0 -> s0;
+    init1 -> s1;
+    init6 -> s6;
+    init7 -> s7;
+    s0 -> s0;
+    s0 -> s1;
+    s0 -> s2;
+    s1 -> s0;
+    s1 -> s1;
+    s1 -> s3 [dir="back"];
+    s2 -> s2;
+    s2 -> s3;
+    s2 -> s6;
+    s3 -> s2;
+    s3 -> s3;
+    s6 -> s6;
+    s6 -> s7;
+    s7 -> s3;
+    s7 -> s6;
+    s7 -> s7;
+    {rank=same s0 s2 init0}
+    {rank=same s1 s3 init1}
+    {rank=same s6 init6}
+    {rank=same s7 init7}
+}
