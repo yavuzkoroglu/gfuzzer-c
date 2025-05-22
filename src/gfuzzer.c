@@ -1,6 +1,3 @@
-/**
- * @author Yavuz Koroglu
- */
 #include "padkit/verbose.h"
 
 int main(void) {
