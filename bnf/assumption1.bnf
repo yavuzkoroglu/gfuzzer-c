@@ -1,0 +1,7 @@
+<assumption>    ::= <conjunction_1> | <atomicprop> | <true>
+<conjunction_1> ::= <conjunction_2> | <conjunction_2> <and> <atomicprop>
+<conjunction_2> ::= <atomicprop> <and> <atomicprop>
+<and>           ::= '&'
+<atomicprop>    ::= 'p'
+<true>          ::= 'T'
+
