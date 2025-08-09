@@ -1,6 +1,10 @@
 #ifndef BNF_H
     #define BNF_H
 
+    #ifndef BNF_MAX_SZ_FILE
+        #define BNF_MAX_SZ_FILE (1048576)
+    #endif
+
     #ifndef BNF_STR_TERMINAL_OPEN
         #define BNF_STR_TERMINAL_OPEN "'"
     #endif
@@ -31,5 +35,9 @@
 
     #ifndef BNF_STR_LINE_COMMENT
         #define BNF_STR_LINE_COMMENT ";"
+    #endif
+
+    #ifndef BNF_STR_ALTERNATIVE
+        #define BNF_STR_ALTERNATIVE "|"
     #endif
 #endif
