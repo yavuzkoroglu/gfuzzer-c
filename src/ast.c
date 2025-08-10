@@ -272,7 +272,7 @@ Item expandRandom_ast(
             uint32_t const parent_id    = get_alist(stack, stack_id++);
             ASTreeNode* const parent    = getNode_ast(ast, parent_id);
             if (parent->cov_count == 0) {
-                assert(ast->n_tokens_covered_once);
+                assert(ast->n_tokens_covered_once > 0);
                 ast->n_tokens_covered_once--;
                 ast->n_tokens_not_covered++;
             }
@@ -303,7 +303,11 @@ Item expandRandom_ast(
                 }
 
                 {
-                    ASTreeNodeExpansion const* child = getExpansion_ast(ast, child_id);
+                    ASTreeNodeExpansion* child = getExpansion_ast(ast, child_id);
+                    child->cov_count++;
+                    assert(ast->n_tokens_covered_once > 0);
+                    ast->n_tokens_not_covered--;
+                    ast->n_tokens_covered_once++;
                     while (child != NULL) {
                         if (isTerminal_aste(ast, child)) {
                             Item const exp_item = get_chunk(ast->chunk, child->str_id);
