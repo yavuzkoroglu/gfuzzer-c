@@ -176,6 +176,8 @@ int main(
 ) {
     FILE* bnf_file                  = NULL;
     char const* bnf_filename        = NULL;
+    char const* root_str            = NULL;
+    uint32_t const root_len         = 0;
     bool* const is_arg_processed    = mem_calloc((size_t)argc, sizeof(bool));
     bool unique                     = 1;
     uint32_t n                      = 100;
@@ -260,6 +262,33 @@ int main(
     for (int i = argc - 1; i > 0; i--) {
         if (is_arg_processed[i]) continue;
 
+        if (LITEQ(argv[i], "-r") || LITEQ(argv[i], "--root")) {
+            if (i == argc - 1) {
+                showErrorRootMissing();
+                free(is_arg_processed);
+                return EXIT_FAILURE;
+            }
+            bnf_filename = argv[i + 1];
+            if (bnf_filename[0] == '-') {
+                showErrorBNFFilenameMissing();
+                free(is_arg_processed);
+                return EXIT_FAILURE;
+            }
+            if (strlen(bnf_filename) > FILENAME_MAX) {
+                showErrorBNFFilenameTooLong();
+                free(is_arg_processed);
+                return EXIT_FAILURE;
+            }
+            printf_verbose("BNF File = %.*s", FILENAME_MAX, bnf_filename);
+            is_arg_processed[i]     = 1;
+            is_arg_processed[i + 1] = 1;
+            break;
+        }
+    }
+
+    for (int i = argc - 1; i > 0; i--) {
+        if (is_arg_processed[i]) continue;
+
         if (LITEQ(argv[i], "-s") || LITEQ(argv[i], "--same")) {
             unique = 0;
             break;
@@ -337,8 +366,24 @@ int main(
         free(is_arg_processed);
         return EXIT_FAILURE;
     }
+    switch (constructFromBNF_ast(ast, bnf_file, root_str, root_len)) {
+        case AST_OK:
+            break;
+        case AST_SYNTAX_ERROR:
+        default:
+            showErrorSyntax();
+            fclose(bnf_file);
+            free(is_arg_processed);
+            return EXIT_FAILURE;
+    }
     fclose(bnf_file);
 
+    generateAndPrintNSentencesWithinTSeconds(ast, n, t, unique);
+
+    printf_verbose("# Tokens (Not-Covered) = %"PRIu32, ast->n_tokens_not_covered);
+    printf_verbose("# Tokens (Covered-Once) = %"PRIu32, ast->n_tokens_covered_once);
+    printf_verbose("# Tokens (Total) = %"PRIu32, ast->n_tokens_total);
+    printf_verbose("Token Coverage = %"PRIu32"%%", getTokenCov_ast(ast));
     printf_verbose("Finished.");
 
     free(is_arg_processed);
