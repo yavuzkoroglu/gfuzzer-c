@@ -1,6 +1,11 @@
+#include <inttypes.h>
 #include <string.h>
+#include "ast.h"
 #include "padkit/memalloc.h"
 #include "padkit/verbose.h"
+
+#define MAX_N       (4194304)
+#define MAX_TIMEOUT (604800)
 
 static void showCopyright(void) {
     fputs(
@@ -8,6 +13,19 @@ static void showCopyright(void) {
         "Copyright (C) 2025 Yavuz Koroglu\n"
         "\n",
         stderr
+    );
+}
+
+static void showErrorBadNumber(char const* const arg1, char const* const arg2) {
+    fprintf(
+        stderr,
+        "\n"
+        "[ERROR] - Expected number @ '%.32s %.32s'\n"
+        "\n"
+        "gfuzzer --help for more instructions\n"
+        "\n",
+        arg1,
+        arg2
     );
 }
 
@@ -34,6 +52,19 @@ static void showErrorBNFFilenameTooLong(void) {
     );
 }
 
+static void showErrorCannotOpenBNF(char const* const bnf_filename) {
+    fprintf(
+        stderr,
+        "\n"
+        "[ERROR] - Cannot open '%.*s'\n"
+        "\n"
+        "gfuzzer --help for more instructions\n"
+        "\n",
+        FILENAME_MAX,
+        bnf_filename
+    );
+}
+
 static void showErrorNoBNFFilenameGiven(void) {
     fputs(
         "\n"
@@ -42,6 +73,63 @@ static void showErrorNoBNFFilenameGiven(void) {
         "gfuzzer --help for more instructions\n"
         "\n",
         stderr
+    );
+}
+
+static void showErrorNumberMissing(void) {
+    fputs(
+        "\n"
+        "[ERROR] - Must specify a NUMBER file with -n or --number\n"
+        "\n"
+        "gfuzzer --help for more instructions\n"
+        "\n",
+        stderr
+    );
+}
+
+static void showErrorNumberTooLarge(uint32_t const n) {
+    fprintf(
+        stderr,
+        "\n"
+        "[ERROR] - NUMBER must NOT exceed %d (n = %"PRIu32")\n"
+        "\n"
+        "gfuzzer --help for more instructions\n"
+        "\n",
+        MAX_N, n
+    );
+}
+
+static void showErrorTimeoutMissing(void) {
+    fputs(
+        "\n"
+        "[ERROR] - Must specify a TIMEOUT file with -t or --timeout\n"
+        "\n"
+        "gfuzzer --help for more instructions\n"
+        "\n",
+        stderr
+    );
+}
+
+static void showErrorTimeoutZero(void) {
+    fputs(
+        "\n"
+        "[ERROR] - TIMEOUT cannot be zero\n"
+        "\n"
+        "gfuzzer --help for more instructions\n"
+        "\n",
+        stderr
+    );
+}
+
+static void showErrorTimeoutTooLarge(uint32_t const t) {
+    fprintf(
+        stderr,
+        "\n"
+        "[ERROR] - TIMEOUT must NOT exceed %d (t = %"PRIu32")\n"
+        "\n"
+        "gfuzzer --help for more instructions\n"
+        "\n",
+        MAX_TIMEOUT, t
     );
 }
 
@@ -56,10 +144,11 @@ static void showUsage(void) {
         "  -b,--bnf BNF-FILE            (Mandatory) An input grammar in Backus-Naur Form\n"
         "  -C,--copyright               Output the copyright message and exit\n"
         "  -h,--help                    Output this help message and exit\n"
-        "  -n,--number                  The number of sentences (Default: 100)\n"
+        "  -n,--number NUMBER           The number of sentences (Default: 100)\n"
         "  -r,--root                    The root rule (Default: The first rule in the BNF-FILE)\n"
         "  -s,--same                    Allow the same sentence twice (Default: Do NOT allow / UNIQUE = true)\n"
-        "  -v,--verbose                 Timestamped status information to stdout\n"
+        "  -t,--timeout TIMEOUT         Terminate generating sentences after some seconds (Default: 60)\n"
+        "  -v,--verbose                 Timestamped status information (including token coverage) to stdout\n"
         "  -V,--version                 Output version number and exit\n"
         "\n"
         "EXAMPLE USES:\n"
@@ -85,10 +174,12 @@ int main(
     int argc,
     char* argv[]
 ) {
+    FILE* bnf_file                  = NULL;
     char const* bnf_filename        = NULL;
     bool* const is_arg_processed    = mem_calloc((size_t)argc, sizeof(bool));
     bool unique                     = 1;
     uint32_t n                      = 100;
+    uint32_t t                      = 60;
 
     if (argc <= 1) {
         showUsage();
@@ -183,13 +274,72 @@ int main(
         if (is_arg_processed[i]) continue;
 
         if (LITEQ(argv[i], "-n") || LITEQ(argv[i], "--number")) {
+            if (i == argc - 1) {
+                showErrorNumberMissing();
+                free(is_arg_processed);
+                return EXIT_FAILURE;
+            }
+            if (sscanf(argv[i + 1], "%"SCNu32, &n) != 1) {
+                showErrorBadNumber(argv[i], argv[i + 1]);
+                free(is_arg_processed);
+                return EXIT_FAILURE;
+            }
+            if (n == 0) {
+                free(is_arg_processed);
+                return EXIT_SUCCESS;
+            }
+            if (n > MAX_N) {
+                showErrorNumberTooLarge(n);
+                free(is_arg_processed);
+                return EXIT_FAILURE;
+            }
+            is_arg_processed[i]     = 1;
+            is_arg_processed[i + 1] = 1;
             break;
         }
     }
+    printf_verbose("n = %"PRIu32" sentences", n);
+
+    for (int i = argc - 1; i > 0; i--) {
+        if (is_arg_processed[i]) continue;
+
+        if (LITEQ(argv[i], "-t") || LITEQ(argv[i], "--timeout")) {
+            if (i == argc - 1) {
+                showErrorTimeoutMissing();
+                free(is_arg_processed);
+                return EXIT_FAILURE;
+            }
+            if (sscanf(argv[i + 1], "%"PRIu32, &t) != 1) {
+                showErrorBadNumber(argv[i], argv[i + 1]);
+                free(is_arg_processed);
+                return EXIT_FAILURE;
+            }
+            if (t == 0) {
+                showErrorTimeoutZero();
+                free(is_arg_processed);
+                return EXIT_FAILURE;
+            }
+            if (t > MAX_TIMEOUT) {
+                showErrorTimeoutTooLarge(t);
+                free(is_arg_processed);
+                return EXIT_FAILURE;
+            }
+            is_arg_processed[i]     = 1;
+            is_arg_processed[i + 1] = 1;
+            break;
+        }
+    }
+    printf_verbose("t = %"PRIu32" seconds", t);
+
+    bnf_file = fopen(bnf_filename, "r");
+    if (bnf_file == NULL) {
+        showErrorCannotOpenBNF(bnf_filename);
+        free(is_arg_processed);
+        return EXIT_FAILURE;
+    }
+    fclose(bnf_file);
 
     printf_verbose("Finished.");
-
-    generateAndPrintNSentences(bnf_filename, n)
 
     free(is_arg_processed);
     return EXIT_SUCCESS;
