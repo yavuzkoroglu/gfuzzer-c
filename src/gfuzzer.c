@@ -211,7 +211,7 @@ static void showUsage(char const* const path) {
                           "\"           The root rule (Default: The first rule in the BNF-FILE)\n"
         "  -s,--same                    Allow the same sentence twice (Default: Do NOT allow / UNIQUE = true)\n"
         "  -t,--timeout TIMEOUT         Terminate generating sentences after some seconds (Default: 60)\n"
-        "  -v,--verbose                 Timestamped status information (including term coverage) to stdout\n"
+        "  -v,--verbose                 Timestamped status information (including term coverage) to stderr\n"
         "  -V,--version                 Output version number and exit\n"
         "\n"
         BNF_STR_RULE_OPEN"RULE"BNF_STR_RULE_CLOSE" FORMAT:\n"

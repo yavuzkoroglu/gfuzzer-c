@@ -82,7 +82,7 @@ int constructFromBNF_ast(
         }
         if (term_len <= 2) return AST_SYNTAX_ERROR;
         memcpy(term_str, line_str + i, term_len);
-        fprintf_verbose(stderr, "AST: Rule = %.*s", term_len, term_str);
+        /* fprintf_verbose(stderr, "AST: Rule = %.*s", term_len, term_str); */
 
         term_index  = hash64_str(term_str, term_len);
         mapping     = insert_itbl(
@@ -168,7 +168,7 @@ int constructFromBNF_ast(
                 term_len += sizeof(BNF_STR_RULE_CLOSE) - 1;
                 if (term_len > AST_MAX_LEN_TERM)                return AST_SYNTAX_ERROR;
                 memcpy(term_str, line_str + i, term_len);
-                fprintf_verbose(stderr, "AST: Subrule = %.*s", (int)term_len, term_str);
+                /* fprintf_verbose(stderr, "AST: Subrule = %.*s", (int)term_len, term_str); */
 
                 term_index  = hash64_str(term_str, term_len);
                 mapping     = insert_itbl(
@@ -214,12 +214,14 @@ int constructFromBNF_ast(
                     if (++j >= line.sz)                             return AST_SYNTAX_ERROR;
                 } while (!LITEQ(line_str + j, BNF_STR_TERMINAL_CLOSE));
                 memcpy(term_str, line_str + i, term_len);
+                /*
                 fprintf_verbose(
                     stderr,
                     "AST: Terminal = "BNF_STR_TERMINAL_OPEN"%.*s"BNF_STR_TERMINAL_CLOSE,
                     (int)term_len,
                     term_str
                 );
+                */
 
                 expansion->node_id  = INVALID_UINT32;
                 expansion->str_id   = LEN_CHUNK(ast->chunk);
