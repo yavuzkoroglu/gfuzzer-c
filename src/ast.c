@@ -22,12 +22,12 @@ int constructFromBNF_ast(
     char const* const root_str,
     uint32_t const root_len
 ) {
+    IndexMapping* mapping;
     ASTreeNode* parent;
     ASTreeNode* child;
     ASTreeExpansion* expansion;
     bool ins_result;
     char token_str[AST_MAX_LEN_TOKEN];
-    char exp_str[AST_MAX_LEN_EXPANSION];
 
     assert(ast != NULL);
     assert(bnf_file != NULL);
@@ -38,7 +38,7 @@ int constructFromBNF_ast(
 
     constructEmpty_chunk(ast->chunk, CHUNK_RECOMMENDED_PARAMETERS);
     constructEmpty_itbl(ast->chunktbl, ITBL_RECOMMENDED_PARAMETERS);
-    ast->root_id = INVALID_UINT32;
+    ast->root_id                = INVALID_UINT32;
     ast->n_tokens_not_covered   = 0;
     ast->n_tokens_covered_once  = 0;
     ast->n_tokens_total         = 0;
@@ -49,24 +49,21 @@ int constructFromBNF_ast(
     cutByDelimLast_chunk(ast->chunk, "\n");
     printf_verbose("AST: # Lines in BNF = %"PRIu32, LEN_CHUNK(ast->chunk));
 
-    for (uint32_t line_id = LEN_CHUNK(ast->chunk) - 1; line_id > 0; line_id--) {
-        IndexMapping* mapping       = NULL;
+    for (uint32_t line_id = LEN_CHUNK(ast->chunk); line_id-- > 0;) {
         Item const line             = get_chunk(ast->chunk, line_id);
         char const* const line_str  = (char*)line.p;
         uint32_t i                  = 0;
         uint32_t j                  = 0;
-        uint32_t exp_len            = 0;
         uint32_t token_len          = 0;
         uint_fast64_t token_index   = 0;
-        uint_fast64_t exp_index     = 0;
 
-        printf_verbose("AST: Line = %"PRIu32": \"%.*s\"", line_id, (int)line.sz, line_str);
+        printf_verbose("AST: Line = %"PRIu32": \"%.*s\"", line_id + 1, (int)line.sz, line_str);
 
         /* Skip spaces */
         while (i < line.sz && isspace(line_str[i])) i++;
 
-        /* Ignore comments */
-        if (i == line.sz || LITEQ(line_str + i, BNF_STR_LINE_COMMENT)) continue;
+        /* Ignore comments and empty lines */
+        if (i == line.sz || line_str[i] == '\0' || LITEQ(line_str + i, BNF_STR_LINE_COMMENT)) continue;
 
         /* Rule token must start with BNF_STR_RULE_OPEN */
         if (!LITEQ(line_str + i, BNF_STR_RULE_OPEN)) return AST_SYNTAX_ERROR;
@@ -85,19 +82,18 @@ int constructFromBNF_ast(
         }
         if (token_len <= 2) return AST_SYNTAX_ERROR;
         memcpy(token_str, line_str + i, token_len);
+        printf_verbose("AST: Rule = %.*s", token_len, token_str);
+
         token_index = hash64_str(token_str, token_len);
-        ins_result  = insert_itbl(
-            mapping,
+        mapping     = insert_itbl(
+            &ins_result,
             ast->chunktbl,
             token_index,
-            LEN_CHUNK(ast->chunk),
+            LEN_CHUNK(ast->chunk) + 1,
             ITBL_BEHAVIOR_RESPECT,
             ITBL_RELATION_ONE_TO_ONE
         );
         if (ins_result == ITBL_INSERT_UNIQUE) {
-            if (root_str == NULL || (token_len == root_len && memcmp(token_str, root_str, token_len) == 0))
-                ast->root_id = LEN_CHUNK(ast->chunk);
-
             add_chunk(ast->chunk, token_str, token_len);
             parent                  = addIndeterminate_chunk(ast->chunk, sizeof(ASTreeNode)).p;
             parent->cov_count       = 0;
@@ -107,9 +103,13 @@ int constructFromBNF_ast(
             ast->n_tokens_total++;
             ast->n_tokens_not_covered++;
         } else {
-            parent = get_chunk(ast->chunk, mapping->value).p;
+            Item const parent_item  = get_chunk(ast->chunk, mapping->value);
+            assert(parent_item.sz == sizeof(ASTreeNode));
+            parent                  = parent_item.p;
             assert(isValid_astn(ast, parent));
         }
+        if (root_str == NULL || (token_len == root_len && memcmp(token_str, root_str, token_len) == 0))
+            ast->root_id = mapping->value;
 
         /* Skip BNF_STR_RULE_CLOSE */
         i = j + sizeof(BNF_STR_RULE_CLOSE) - 1;
@@ -118,7 +118,7 @@ int constructFromBNF_ast(
         while (i < line.sz && isspace(line_str[i])) i++;
 
         /* Must have something after the rule declaration */
-        if (i == line.sz) return AST_SYNTAX_ERROR;
+        if (i == line.sz || line_str[i] == '\0') return AST_SYNTAX_ERROR;
 
         /* Must have the BNF_STR_EQUIV operator */
         if (!LITEQ(line_str + i, BNF_STR_EQUIV)) return AST_SYNTAX_ERROR;
@@ -130,7 +130,7 @@ int constructFromBNF_ast(
         while (i < line.sz && isspace(line_str[i])) i++;
 
         /* Cannot have empty expansion */
-        if (i == line.sz) return AST_SYNTAX_ERROR;
+        if (i == line.sz || line_str[i] == '\0') return AST_SYNTAX_ERROR;
 
         /* Must have at least one expansion. */
         parent->expansion_ids[parent->n_expansions++] = LEN_CHUNK(ast->chunk);
@@ -140,7 +140,7 @@ int constructFromBNF_ast(
         ast->n_tokens_total++;
         ast->n_tokens_not_covered++;
 
-        while (i < line.sz) {
+        while (i < line.sz && line_str[i] != '\0') {
             if (LITEQ(line_str + i, BNF_STR_ALTERNATIVE)) {
                 assert(parent->n_expansions < AST_MAX_N_EXPANSIONS);
                 parent->expansion_ids[parent->n_expansions++] = LEN_CHUNK(ast->chunk);
@@ -157,33 +157,32 @@ int constructFromBNF_ast(
                 while (i < line.sz && isspace(line_str[i])) i++;
 
                 /* Cannot have empty expansion */
-                if (i == line.sz) return AST_SYNTAX_ERROR;
+                if (i == line.sz || line_str[i] == '\0') return AST_SYNTAX_ERROR;
             } else if (LITEQ(line_str + i, BNF_STR_RULE_OPEN)) {
                 j = i + sizeof(BNF_STR_RULE_OPEN) - 1;
-                exp_len = sizeof(BNF_STR_RULE_OPEN) - 1;
+                token_len = sizeof(BNF_STR_RULE_OPEN) - 1;
                 if (j >= line.sz)                                   return AST_SYNTAX_ERROR;
                 if (LITEQ(line_str + j, BNF_STR_RULE_CLOSE))        return AST_SYNTAX_ERROR;
                 do {
                     if (isspace(line_str[j]))                       return AST_SYNTAX_ERROR;
-                    if (++exp_len > AST_MAX_LEN_EXPANSION)          return AST_SYNTAX_ERROR;
+                    if (++token_len > AST_MAX_LEN_TOKEN)            return AST_SYNTAX_ERROR;
                     if (++j >= line.sz)                             return AST_SYNTAX_ERROR;
                 } while (!LITEQ(line_str + j, BNF_STR_RULE_CLOSE));
-                exp_len += sizeof(BNF_STR_RULE_CLOSE) - 1;
-                if (exp_len > AST_MAX_LEN_EXPANSION)                return AST_SYNTAX_ERROR;
-                expansion->str_id = INVALID_UINT32;
-                exp_index = hash64_str(line_str + i, exp_len);
-                ins_result  = insert_itbl(
-                    mapping,
+                token_len += sizeof(BNF_STR_RULE_CLOSE) - 1;
+                if (token_len > AST_MAX_LEN_TOKEN)                  return AST_SYNTAX_ERROR;
+                memcpy(token_str, line_str + i, token_len);
+                printf_verbose("AST: Subrule = %.*s", (int)token_len, token_str);
+
+                token_index = hash64_str(token_str, token_len);
+                mapping     = insert_itbl(
+                    &ins_result,
                     ast->chunktbl,
-                    exp_index,
-                    LEN_CHUNK(ast->chunk),
+                    token_index,
+                    LEN_CHUNK(ast->chunk) + 1,
                     ITBL_BEHAVIOR_RESPECT,
                     ITBL_RELATION_ONE_TO_ONE
                 );
                 if (ins_result == ITBL_INSERT_UNIQUE) {
-                    if (root_str != NULL && exp_len == root_len && memcmp(line_str + i, root_str, exp_len) == 0)
-                        ast->root_id = LEN_CHUNK(ast->chunk);
-
                     add_chunk(ast->chunk, token_str, token_len);
                     child               = addIndeterminate_chunk(ast->chunk, sizeof(ASTreeNode)).p;
                     child->cov_count    = 0;
@@ -193,6 +192,8 @@ int constructFromBNF_ast(
                     ast->n_tokens_total++;
                     ast->n_tokens_not_covered++;
                 }
+                expansion->str_id   = INVALID_UINT32;
+                expansion->node_id  = mapping->value;
 
                 i = j + 1;
 
@@ -208,22 +209,29 @@ int constructFromBNF_ast(
             } else if (LITEQ(line_str + i, BNF_STR_TERMINAL_OPEN)) {
                 i += sizeof(BNF_STR_TERMINAL_OPEN) - 1;
                 j = i;
-                exp_len = 0;
+                token_len = 0;
                 if (j >= line.sz)                                   return AST_SYNTAX_ERROR;
                 if (LITEQ(line_str + j, BNF_STR_TERMINAL_CLOSE))    return AST_SYNTAX_ERROR;
                 do {
-                    if (++exp_len > AST_MAX_LEN_EXPANSION)          return AST_SYNTAX_ERROR;
+                    if (++token_len > AST_MAX_LEN_TOKEN)            return AST_SYNTAX_ERROR;
                     if (++j >= line.sz)                             return AST_SYNTAX_ERROR;
                 } while (!LITEQ(line_str + j, BNF_STR_TERMINAL_CLOSE));
+                memcpy(token_str, line_str + i, token_len);
+                printf_verbose(
+                    "AST: Terminal = "BNF_STR_TERMINAL_OPEN"%.*s"BNF_STR_TERMINAL_CLOSE,
+                    (int)token_len,
+                    token_str
+                );
+
                 expansion->node_id  = INVALID_UINT32;
                 expansion->str_id   = LEN_CHUNK(ast->chunk);
-                add_chunk(ast->chunk, line_str + i, exp_len);
+                add_chunk(ast->chunk, token_str, token_len);
                 i = j + 1;
 
                 /* Skip spaces */
                 while (i < line.sz && isspace(line_str[i])) i++;
 
-                if (i < line.sz) {
+                if (i < line.sz && line_str[i] != '\0') {
                     expansion->next_id = LEN_CHUNK(ast->chunk);
                     expansion = addIndeterminate_chunk(ast->chunk, sizeof(ASTreeExpansion)).p;
                     expansion->cov_count    = 0;
@@ -238,6 +246,7 @@ int constructFromBNF_ast(
         }
     }
 
+    printf_verbose("AST: # Tokens = %"PRIu32, ast->n_tokens_total);
     return AST_OK;
 }
 
@@ -331,8 +340,9 @@ Item expandRandom_ast(
     {
         Item const item             = getLast_chunk(str_builder);
         uint_fast64_t const index   = hash64_str(item.p, item.sz);
-        int const ins_result        = insert_itbl(
-            NULL,
+        bool ins_result;
+        insert_itbl(
+            &ins_result,
             str_builder_tbl,
             index,
             LEN_CHUNK(str_builder) - 1,
