@@ -3,8 +3,7 @@
     #include "padkit/chunk.h"
     #include "padkit/indextable.h"
 
-    #define AST_MAX_LEN_TOKEN       (1024)
-    #define AST_MAX_LEN_EXPANSION   (4096)
+    #define AST_MAX_LEN_TERM        (1024)
     #define AST_MAX_N_EXPANSIONS    (29)
 
     #define NOT_AN_ASTREE           ((ASTree){ { NOT_A_CHUNK }, { NOT_AN_ITBL }, 0, 0, 0, 0 })
@@ -13,9 +12,9 @@
         Chunk       chunk[1];
         IndexTable  chunktbl[1];
         uint32_t    root_id;
-        uint32_t    n_tokens_not_covered;
-        uint32_t    n_tokens_covered_once;
-        uint32_t    n_tokens_total;
+        uint32_t    n_terms_not_covered;
+        uint32_t    n_terms_covered_once;
+        uint32_t    n_terms_total;
     } ASTree;
 
     typedef struct ASTreeExpansionBody {
@@ -57,7 +56,7 @@
         uint32_t const node_id
     );
 
-    uint32_t getTokenCov_ast(ASTree const* const ast);
+    uint32_t getTermCov_ast(ASTree const* const ast);
 
     bool isAllocated_ast(ASTree const* const ast);
 

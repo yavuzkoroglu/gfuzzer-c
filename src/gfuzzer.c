@@ -132,7 +132,7 @@ static void showErrorRootStrTooLong(char const* const root_str) {
         "\n"
         "gfuzzer --help for more instructions\n"
         "\n",
-        AST_MAX_LEN_TOKEN, AST_MAX_LEN_TOKEN, root_str
+        AST_MAX_LEN_TERM, AST_MAX_LEN_TERM, root_str
     );
 }
 
@@ -144,7 +144,7 @@ static void showErrorRootStrBadFormat(char const* const root_str) {
         "\n"
         "gfuzzer --help for more instructions\n"
         "\n",
-        AST_MAX_LEN_TOKEN, root_str
+        AST_MAX_LEN_TERM, root_str
     );
 }
 
@@ -211,7 +211,7 @@ static void showUsage(char const* const path) {
                           "\"           The root rule (Default: The first rule in the BNF-FILE)\n"
         "  -s,--same                    Allow the same sentence twice (Default: Do NOT allow / UNIQUE = true)\n"
         "  -t,--timeout TIMEOUT         Terminate generating sentences after some seconds (Default: 60)\n"
-        "  -v,--verbose                 Timestamped status information (including token coverage) to stdout\n"
+        "  -v,--verbose                 Timestamped status information (including term coverage) to stdout\n"
         "  -V,--version                 Output version number and exit\n"
         "\n"
         BNF_STR_RULE_OPEN"RULE"BNF_STR_RULE_CLOSE" FORMAT:\n"
@@ -286,11 +286,11 @@ int main(
     for (int i = argc - 1; i > 0; i--) {
         if (LITEQ(argv[i], "-v") || LITEQ(argv[i], "--verbose")) {
             verbose = 1;
-            printf_verbose("Verbose enabled.");
+            fprintf_verbose(stderr, "Verbose enabled.");
             #ifndef NDEBUG
-                printf_verbose("MODE = debug");
+                fprintf_verbose(stderr, "MODE = debug");
             #else
-                printf_verbose("MODE = release");
+                fprintf_verbose(stderr, "MODE = release");
             #endif
             is_arg_processed[i] = 1;
             break;
@@ -317,7 +317,7 @@ int main(
                 free(is_arg_processed);
                 return EXIT_FAILURE;
             }
-            printf_verbose("BNF File = %.*s", FILENAME_MAX, bnf_filename);
+            fprintf_verbose(stderr, "BNF File = %.*s", FILENAME_MAX, bnf_filename);
             is_arg_processed[i]     = 1;
             is_arg_processed[i + 1] = 1;
             break;
@@ -340,7 +340,7 @@ int main(
                 return EXIT_FAILURE;
             }
             root_len = strlen(root_str);
-            if (root_len > AST_MAX_LEN_TOKEN) {
+            if (root_len > AST_MAX_LEN_TERM) {
                 showErrorRootStrTooLong(root_str);
                 free(is_arg_processed);
                 return EXIT_FAILURE;
@@ -370,9 +370,9 @@ int main(
         }
     }
     if (unique)
-        printf_verbose("UNIQUE = true");
+        fprintf_verbose(stderr, "UNIQUE = true");
     else
-        printf_verbose("UNIQUE = false");
+        fprintf_verbose(stderr, "UNIQUE = false");
 
     for (int i = argc - 1; i > 0; i--) {
         if (is_arg_processed[i]) continue;
@@ -402,7 +402,7 @@ int main(
             break;
         }
     }
-    printf_verbose("n = %"PRIu32" sentences", n);
+    fprintf_verbose(stderr, "n = %"PRIu32" sentences", n);
 
     for (int i = argc - 1; i > 0; i--) {
         if (is_arg_processed[i]) continue;
@@ -433,7 +433,7 @@ int main(
             break;
         }
     }
-    printf_verbose("t = %"PRIu32" seconds", t);
+    fprintf_verbose(stderr, "t = %"PRIu32" seconds", t);
 
     bnf_file = fopen(bnf_filename, "r");
     if (bnf_file == NULL) {
@@ -455,16 +455,16 @@ int main(
     if (verbose) {
         ASTreeNode const* const root    = getNode_ast(ast, ast->root_id);
         Item const root_str_item        = get_chunk(ast->chunk, root->str_id);
-        printf_verbose("Root Rule = %.*s", root_str_item.sz, root_str_item.p);
+        fprintf_verbose(stderr, "Root Rule = %.*s", root_str_item.sz, root_str_item.p);
     }
 
     generateAndPrintNSentencesWithinTSeconds(ast, n, t, unique);
 
-    printf_verbose("# Tokens (Not-Covered) = %"PRIu32, ast->n_tokens_not_covered);
-    printf_verbose("# Tokens (Covered-Once) = %"PRIu32, ast->n_tokens_covered_once);
-    printf_verbose("# Tokens (Total) = %"PRIu32, ast->n_tokens_total);
-    printf_verbose("Token Coverage = %"PRIu32"%%", getTokenCov_ast(ast));
-    printf_verbose("Finished.");
+    fprintf_verbose(stderr, "# Terms (Not-Covered) = %"PRIu32, ast->n_terms_not_covered);
+    fprintf_verbose(stderr, "# Terms (Covered-Once) = %"PRIu32, ast->n_terms_covered_once);
+    fprintf_verbose(stderr, "# Terms (Total) = %"PRIu32, ast->n_terms_total);
+    fprintf_verbose(stderr, "Term Coverage = %"PRIu32"%%", getTermCov_ast(ast));
+    fprintf_verbose(stderr, "Finished.");
 
     free(is_arg_processed);
     return EXIT_SUCCESS;

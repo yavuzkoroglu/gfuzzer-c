@@ -27,37 +27,37 @@ int constructFromBNF_ast(
     ASTreeNode* child;
     ASTreeExpansion* expansion;
     bool ins_result;
-    char token_str[AST_MAX_LEN_TOKEN];
+    char term_str[AST_MAX_LEN_TERM];
 
     assert(ast != NULL);
     assert(bnf_file != NULL);
     assert(IMPLIES(root_str != NULL,
-        0 < root_len && root_len < AST_MAX_LEN_TOKEN &&
-        strlen(root_str) < AST_MAX_LEN_TOKEN
+        0 < root_len && root_len < AST_MAX_LEN_TERM &&
+        strlen(root_str) < AST_MAX_LEN_TERM
     ));
 
     constructEmpty_chunk(ast->chunk, CHUNK_RECOMMENDED_PARAMETERS);
     constructEmpty_itbl(ast->chunktbl, ITBL_RECOMMENDED_PARAMETERS);
     ast->root_id                = INVALID_UINT32;
-    ast->n_tokens_not_covered   = 0;
-    ast->n_tokens_covered_once  = 0;
-    ast->n_tokens_total         = 0;
+    ast->n_terms_not_covered    = 0;
+    ast->n_terms_covered_once   = 0;
+    ast->n_terms_total          = 0;
 
     addF_chunk(ast->chunk, bnf_file, BNF_MAX_SZ_FILE, BUFSIZ);
-    printf_verbose("AST: # BNF size = %"PRIu32" bytes", AREA_CHUNK(ast->chunk));
+    fprintf_verbose(stderr, "AST: # BNF size = %"PRIu32" bytes", AREA_CHUNK(ast->chunk));
 
     cutByDelimLast_chunk(ast->chunk, "\n");
-    printf_verbose("AST: # Lines in BNF = %"PRIu32, LEN_CHUNK(ast->chunk));
+    fprintf_verbose(stderr, "AST: # Lines in BNF = %"PRIu32, LEN_CHUNK(ast->chunk));
 
     for (uint32_t line_id = LEN_CHUNK(ast->chunk); line_id-- > 0;) {
         Item const line             = get_chunk(ast->chunk, line_id);
         char const* const line_str  = (char*)line.p;
         uint32_t i                  = 0;
         uint32_t j                  = 0;
-        uint32_t token_len          = 0;
-        uint_fast64_t token_index   = 0;
+        uint32_t term_len           = 0;
+        uint_fast64_t term_index    = 0;
 
-        printf_verbose("AST: Line = %"PRIu32": \"%.*s\"", line_id + 1, (int)line.sz, line_str);
+        /* fprintf_verbose(stderr, "AST: Line = %"PRIu32": \"%.*s\"", line_id + 1, (int)line.sz, line_str); */
 
         /* Skip spaces */
         while (i < line.sz && isspace(line_str[i])) i++;
@@ -65,50 +65,51 @@ int constructFromBNF_ast(
         /* Ignore comments and empty lines */
         if (i == line.sz || line_str[i] == '\0' || LITEQ(line_str + i, BNF_STR_LINE_COMMENT)) continue;
 
-        /* Rule token must start with BNF_STR_RULE_OPEN */
+        /* Rule term must start with BNF_STR_RULE_OPEN */
         if (!LITEQ(line_str + i, BNF_STR_RULE_OPEN)) return AST_SYNTAX_ERROR;
 
-        token_len   = sizeof(BNF_STR_RULE_OPEN);
-        j           = i + token_len - 1;
+        term_len    = sizeof(BNF_STR_RULE_OPEN);
+        j           = i + term_len - 1;
         if (j == line.sz || isspace(line_str[j])) return AST_SYNTAX_ERROR;
         while (!LITEQ(line_str + j, BNF_STR_RULE_CLOSE)) {
             j++;
-            token_len++;
+            term_len++;
             if (
                 j == line.sz            ||
                 isspace(line_str[j])    ||
-                token_len >= AST_MAX_LEN_TOKEN
+                term_len >= AST_MAX_LEN_TERM
             ) return AST_SYNTAX_ERROR;
         }
-        if (token_len <= 2) return AST_SYNTAX_ERROR;
-        memcpy(token_str, line_str + i, token_len);
-        printf_verbose("AST: Rule = %.*s", token_len, token_str);
+        if (term_len <= 2) return AST_SYNTAX_ERROR;
+        memcpy(term_str, line_str + i, term_len);
+        fprintf_verbose(stderr, "AST: Rule = %.*s", term_len, term_str);
 
-        token_index = hash64_str(token_str, token_len);
+        term_index  = hash64_str(term_str, term_len);
         mapping     = insert_itbl(
             &ins_result,
             ast->chunktbl,
-            token_index,
+            term_index,
             LEN_CHUNK(ast->chunk) + 1,
             ITBL_BEHAVIOR_RESPECT,
             ITBL_RELATION_ONE_TO_ONE
         );
         if (ins_result == ITBL_INSERT_UNIQUE) {
-            add_chunk(ast->chunk, token_str, token_len);
+            add_chunk(ast->chunk, term_str, term_len);
+            ast->n_terms_total++;
+            ast->n_terms_not_covered++;
+
             parent                  = addIndeterminate_chunk(ast->chunk, sizeof(ASTreeNode)).p;
             parent->cov_count       = 0;
             parent->str_id          = LEN_CHUNK(ast->chunk) - 2;
             parent->n_expansions    = 0;
-
-            ast->n_tokens_total++;
-            ast->n_tokens_not_covered++;
         } else {
-            Item const parent_item  = get_chunk(ast->chunk, mapping->value);
+            Item const parent_item = get_chunk(ast->chunk, mapping->value);
             assert(parent_item.sz == sizeof(ASTreeNode));
-            parent                  = parent_item.p;
+
+            parent = parent_item.p;
             assert(isValid_astn(ast, parent));
         }
-        if (root_str == NULL || (token_len == root_len && memcmp(token_str, root_str, token_len) == 0))
+        if (root_str == NULL || (term_len == root_len && memcmp(term_str, root_str, term_len) == 0))
             ast->root_id = mapping->value;
 
         /* Skip BNF_STR_RULE_CLOSE */
@@ -137,8 +138,6 @@ int constructFromBNF_ast(
         expansion = addIndeterminate_chunk(ast->chunk, sizeof(ASTreeExpansion)).p;
         expansion->cov_count    = 0;
         expansion->next_id      = INVALID_UINT32;
-        ast->n_tokens_total++;
-        ast->n_tokens_not_covered++;
 
         while (i < line.sz && line_str[i] != '\0') {
             if (LITEQ(line_str + i, BNF_STR_ALTERNATIVE)) {
@@ -147,8 +146,6 @@ int constructFromBNF_ast(
                 expansion = addIndeterminate_chunk(ast->chunk, sizeof(ASTreeExpansion)).p;
                 expansion->cov_count    = 0;
                 expansion->next_id      = INVALID_UINT32;
-                ast->n_tokens_total++;
-                ast->n_tokens_not_covered++;
 
                 /* Skip BNF_STR_ALTERNATIVE */
                 i += sizeof(BNF_STR_ALTERNATIVE) - 1;
@@ -157,40 +154,40 @@ int constructFromBNF_ast(
                 while (i < line.sz && isspace(line_str[i])) i++;
 
                 /* Cannot have empty expansion */
-                if (i == line.sz || line_str[i] == '\0') return AST_SYNTAX_ERROR;
+                if (i == line.sz || line_str[i] == '\0')        return AST_SYNTAX_ERROR;
             } else if (LITEQ(line_str + i, BNF_STR_RULE_OPEN)) {
                 j = i + sizeof(BNF_STR_RULE_OPEN) - 1;
-                token_len = sizeof(BNF_STR_RULE_OPEN) - 1;
-                if (j >= line.sz)                                   return AST_SYNTAX_ERROR;
-                if (LITEQ(line_str + j, BNF_STR_RULE_CLOSE))        return AST_SYNTAX_ERROR;
+                term_len = sizeof(BNF_STR_RULE_OPEN) - 1;
+                if (j >= line.sz)                               return AST_SYNTAX_ERROR;
+                if (LITEQ(line_str + j, BNF_STR_RULE_CLOSE))    return AST_SYNTAX_ERROR;
                 do {
-                    if (isspace(line_str[j]))                       return AST_SYNTAX_ERROR;
-                    if (++token_len > AST_MAX_LEN_TOKEN)            return AST_SYNTAX_ERROR;
-                    if (++j >= line.sz)                             return AST_SYNTAX_ERROR;
+                    if (isspace(line_str[j]))                   return AST_SYNTAX_ERROR;
+                    if (++term_len > AST_MAX_LEN_TERM)          return AST_SYNTAX_ERROR;
+                    if (++j >= line.sz)                         return AST_SYNTAX_ERROR;
                 } while (!LITEQ(line_str + j, BNF_STR_RULE_CLOSE));
-                token_len += sizeof(BNF_STR_RULE_CLOSE) - 1;
-                if (token_len > AST_MAX_LEN_TOKEN)                  return AST_SYNTAX_ERROR;
-                memcpy(token_str, line_str + i, token_len);
-                printf_verbose("AST: Subrule = %.*s", (int)token_len, token_str);
+                term_len += sizeof(BNF_STR_RULE_CLOSE) - 1;
+                if (term_len > AST_MAX_LEN_TERM)                return AST_SYNTAX_ERROR;
+                memcpy(term_str, line_str + i, term_len);
+                fprintf_verbose(stderr, "AST: Subrule = %.*s", (int)term_len, term_str);
 
-                token_index = hash64_str(token_str, token_len);
+                term_index  = hash64_str(term_str, term_len);
                 mapping     = insert_itbl(
                     &ins_result,
                     ast->chunktbl,
-                    token_index,
+                    term_index,
                     LEN_CHUNK(ast->chunk) + 1,
                     ITBL_BEHAVIOR_RESPECT,
                     ITBL_RELATION_ONE_TO_ONE
                 );
                 if (ins_result == ITBL_INSERT_UNIQUE) {
-                    add_chunk(ast->chunk, token_str, token_len);
+                    add_chunk(ast->chunk, term_str, term_len);
+                    ast->n_terms_total++;
+                    ast->n_terms_not_covered++;
+
                     child               = addIndeterminate_chunk(ast->chunk, sizeof(ASTreeNode)).p;
                     child->cov_count    = 0;
                     child->str_id       = LEN_CHUNK(ast->chunk) - 2;
                     child->n_expansions = 0;
-
-                    ast->n_tokens_total++;
-                    ast->n_tokens_not_covered++;
                 }
                 expansion->str_id   = INVALID_UINT32;
                 expansion->node_id  = mapping->value;
@@ -209,23 +206,26 @@ int constructFromBNF_ast(
             } else if (LITEQ(line_str + i, BNF_STR_TERMINAL_OPEN)) {
                 i += sizeof(BNF_STR_TERMINAL_OPEN) - 1;
                 j = i;
-                token_len = 0;
+                term_len = 0;
                 if (j >= line.sz)                                   return AST_SYNTAX_ERROR;
                 if (LITEQ(line_str + j, BNF_STR_TERMINAL_CLOSE))    return AST_SYNTAX_ERROR;
                 do {
-                    if (++token_len > AST_MAX_LEN_TOKEN)            return AST_SYNTAX_ERROR;
+                    if (++term_len > AST_MAX_LEN_TERM)              return AST_SYNTAX_ERROR;
                     if (++j >= line.sz)                             return AST_SYNTAX_ERROR;
                 } while (!LITEQ(line_str + j, BNF_STR_TERMINAL_CLOSE));
-                memcpy(token_str, line_str + i, token_len);
-                printf_verbose(
+                memcpy(term_str, line_str + i, term_len);
+                fprintf_verbose(
+                    stderr,
                     "AST: Terminal = "BNF_STR_TERMINAL_OPEN"%.*s"BNF_STR_TERMINAL_CLOSE,
-                    (int)token_len,
-                    token_str
+                    (int)term_len,
+                    term_str
                 );
 
                 expansion->node_id  = INVALID_UINT32;
                 expansion->str_id   = LEN_CHUNK(ast->chunk);
-                add_chunk(ast->chunk, token_str, token_len);
+                add_chunk(ast->chunk, term_str, term_len);
+                ast->n_terms_total++;
+                ast->n_terms_not_covered++;
                 i = j + 1;
 
                 /* Skip spaces */
@@ -246,7 +246,7 @@ int constructFromBNF_ast(
         }
     }
 
-    printf_verbose("AST: # Tokens = %"PRIu32, ast->n_tokens_total);
+    fprintf_verbose(stderr, "AST: # Terms = %"PRIu32, ast->n_terms_total);
     return AST_OK;
 }
 
@@ -276,16 +276,16 @@ Item expandRandom_ast(
     {
         ArrayList stack[1]  = { NOT_AN_ALIST };
         uint32_t stack_id   = 0;
-        constructEmpty_alist(stack, sizeof(uint32_t), ast->n_tokens_total);
+        constructEmpty_alist(stack, sizeof(uint32_t), ast->n_terms_total);
 
         pushTop_alist(stack, &root_id);
         while (stack_id < stack->len) {
             uint32_t const parent_id    = *(uint32_t*)get_alist(stack, stack_id++);
             ASTreeNode* parent          = getNode_ast(ast, parent_id);
             if (parent->cov_count == 0) {
-                assert(ast->n_tokens_covered_once > 0);
-                ast->n_tokens_covered_once--;
-                ast->n_tokens_not_covered++;
+                assert(ast->n_terms_covered_once > 0);
+                ast->n_terms_covered_once--;
+                ast->n_terms_not_covered++;
             }
             if (parent->cov_count < SZ32_MAX) {
                 parent->cov_count++;
@@ -318,9 +318,9 @@ Item expandRandom_ast(
                     ASTreeExpansion* child  = child_item.p;
                     assert(child_item.sz == sizeof(ASTreeExpansion*));
                     child->cov_count++;
-                    assert(ast->n_tokens_covered_once > 0);
-                    ast->n_tokens_not_covered--;
-                    ast->n_tokens_covered_once++;
+                    assert(ast->n_terms_covered_once > 0);
+                    ast->n_terms_not_covered--;
+                    ast->n_terms_covered_once++;
                     while (child != NULL) {
                         if (isTerminal_aste(ast, child)) {
                             Item const exp_item = get_chunk(ast->chunk, child->str_id);
@@ -372,9 +372,9 @@ ASTreeNode* getNode_ast(
     }
 }
 
-uint32_t getTokenCov_ast(ASTree const* const ast) {
+uint32_t getTermCov_ast(ASTree const* const ast) {
     assert(isValid_ast(ast));
-    return (100 * ast->n_tokens_covered_once) / ast->n_tokens_total;
+    return (100 * ast->n_terms_covered_once) / ast->n_terms_total;
 }
 
 bool isAllocated_ast(ASTree const* const ast) {
@@ -399,10 +399,10 @@ bool isValid_ast(ASTree const* const ast) {
     if (!isValid_chunk(ast->chunk))                                                     return 0;
     if (!isValid_itbl(ast->chunktbl))                                                   return 0;
     if (ast->root_id >= LEN_CHUNK(ast->chunk))                                          return 0;
-    if (ast->n_tokens_total >= LEN_CHUNK(ast->chunk))                                   return 0;
-    if (ast->n_tokens_not_covered >= LEN_CHUNK(ast->chunk))                             return 0;
-    if (ast->n_tokens_covered_once >= LEN_CHUNK(ast->chunk))                            return 0;
-    if (ast->n_tokens_covered_once + ast->n_tokens_not_covered != ast->n_tokens_total)  return 0;
+    if (ast->n_terms_total >= LEN_CHUNK(ast->chunk))                                   return 0;
+    if (ast->n_terms_not_covered >= LEN_CHUNK(ast->chunk))                             return 0;
+    if (ast->n_terms_covered_once >= LEN_CHUNK(ast->chunk))                            return 0;
+    if (ast->n_terms_covered_once + ast->n_terms_not_covered != ast->n_terms_total)  return 0;
 
     return 1;
 }
