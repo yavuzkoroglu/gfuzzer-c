@@ -52,7 +52,10 @@ static void showCopyright(void) {
     );
 }
 
-static void showErrorBadNumber(char const* const arg1, char const* const arg2) {
+static void showErrorBadNumber(
+    char const* const arg1,
+    char const* const arg2
+) {
     fprintf(
         stderr,
         "\n"

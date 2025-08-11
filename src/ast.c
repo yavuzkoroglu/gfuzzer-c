@@ -343,7 +343,7 @@ Item expandRandom_ast(
         Item const item             = getLast_chunk(str_builder);
         uint_fast64_t const index   = hash64_str(item.p, item.sz);
         bool ins_result;
-        insert_itbl(
+        IndexMapping* mapping = insert_itbl(
             &ins_result,
             str_builder_tbl,
             index,
@@ -352,11 +352,16 @@ Item expandRandom_ast(
             ITBL_BEHAVIOR_RESPECT
         );
         if (unique && ins_result == ITBL_INSERT_NOT_UNIQUE) {
-            deleteLast_chunk(str_builder);
-            return NOT_AN_ITEM;
-        } else {
-            return item;
+            Item const dup_item = get_chunk(ast->chunk, mapping->value);
+            while (!areEquiv_item(item, dup_item)) {
+                if (areEquiv_item(item, dup_item)) {
+                    deleteLast_chunk(str_builder);
+                    return NOT_AN_ITEM;
+                }
+                mapping = nextMapping_itbl(str_builder_tbl, mapping);
+            }
         }
+        return item;
     }
 }
 

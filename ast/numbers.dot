@@ -1,0 +1,53 @@
+digraph numbers {
+    node [fontname="PT Mono"];
+    root [shape=none,width=0,height=0,label=""];
+    n1 [label="<number>"];
+    n2 [label="<zero>"];
+    n3 [label="<nonzero>"];
+    n4 [label="<digit-seq>"];
+    n5 [label="<digit>"];
+    n1e1 [label="<zero>\<zero\>", shape="record"];
+    n1e2 [label="<nonzero>\<nonzero\>|<digitseq>\<digit-seq\>", shape="record"];
+    n2e1 [label="'0'", shape="none", height=0];
+    n3e1 [label="'1'", shape="none", height=0];
+    n3e2 [label="'2'", shape="none", height=0];
+    n3e3 [label="'3'", shape="none", height=0];
+    n3e4 [label="'4'", shape="none", height=0];
+    n3e5 [label="'5'", shape="none", height=0];
+    n3e6 [label="'6'", shape="none", height=0];
+    n3e7 [label="'7'", shape="none", height=0];
+    n3e8 [label="'8'", shape="none", height=0];
+    n3e9 [label="'9'", shape="none", height=0];
+    n4e1 [label="<digit>\<digit\>", shape="record"];
+    n4e2 [label="<digit>\<digit\>|<digitseq>\<digit-seq\>", shape="record"];
+    n5e1 [label="<zero>\<zero\>", shape="record"];
+    n5e2 [label="<nonzero>\<nonzero\>", shape="record"];
+    root->n1;
+    n1->n1e1:zero;
+    n1->n1e2:nonzero;
+    n1e1:zero->n2;
+    n1e2:nonzero->n3;
+    n1e2:digitseq->n4;
+    n2->n2e1;
+    n3->n3e1;
+    n3->n3e2;
+    n3->n3e3;
+    n3->n3e4;
+    n3->n3e5;
+    n3->n3e6;
+    n3->n3e7;
+    n3->n3e8;
+    n3->n3e9;
+    n4->n4e1:digit;
+    n4->n4e2:digit;
+    n4e1:digit->n5;
+    n4e2:digit->n5;
+    n4e2:digitseq->n4;
+    n5->n5e1:zero;
+    n5->n5e2:nonzero;
+    n5e1->n2;
+    n5e2->n3;
+    n3e1->n3e2->n3e3->n3e4->n3e5->n3e6->n3e7->n3e8->n3e9 [style="invis"];
+    {rank=same n1e1 n1e2}
+    {rank=same n3e1 n3e2 n3e3 n3e4 n3e5 n3e6 n3e7 n3e8 n3e9}
+}
