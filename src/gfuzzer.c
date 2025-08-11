@@ -1,24 +1,47 @@
+#include <assert.h>
 #include <inttypes.h>
 #include <string.h>
+#include <time.h>
 #include "ast.h"
 #include "bnf.h"
 #include "padkit/memalloc.h"
 #include "padkit/verbose.h"
 
-#define MAX_N       (4194304)
-#define MAX_TIMEOUT (604800)
+#define MAX_N               (4194304)
+#define MAX_TIMEOUT         (604800)
 
+#ifdef TIME_ELAPSED
+    #undef SECONDS_ELAPSED
+#endif
+#define SECONDS_ELAPSED(ts) (difftime(time(NULL), ts))
 static void generateAndPrintNSentencesWithinTSeconds(
     ASTree* const ast,
     uint32_t const n,
     uint32_t const t,
+    bool const is_cov_guided,
     bool const unique
 ) {
-    (void)ast;
-    (void)n;
-    (void)t;
-    (void)unique;
+    Chunk       str_builder[1];
+    IndexTable  str_builder_tbl[1];
+    time_t      ts;
+
+    assert(isValid_ast(ast));
+    assert(n <= MAX_N);
+    assert(t <= MAX_TIMEOUT);
+
+    time(&ts);
+    while (SECONDS_ELAPSED(ts) < t && LEN_CHUNK(str_builder) < n) {
+        Item const sentence = expandRandom_ast(
+            str_builder, str_builder_tbl,
+            ast, ast->root_id,
+            is_cov_guided, unique
+        );
+        if (!isValid_item(sentence)) continue;
+
+        printf("%.*s\n", (int)sentence.sz, (char*)sentence.p);
+    }
 }
+#undef SECONDS_ELAPSED
 
 static void showCopyright(void) {
     fputs(
@@ -201,6 +224,7 @@ static void showUsage(char const* const path) {
         "\n"
         "GENERAL OPTIONS:\n"
         "  -b,--bnf BNF-FILE            (Mandatory) An input grammar in Backus-Naur Form\n"
+        "  -c,--cov-guided              Enable coverage guidance optimization (Default: Disabled)\n"
         "  -C,--copyright               Output the copyright message and exit\n"
         "  -h,--help                    Output this help message and exit\n"
         "  -n,--number NUMBER           The number of sentences (Default: 100)\n"
@@ -220,7 +244,7 @@ static void showUsage(char const* const path) {
         "  * Rules cannot contain whitespace.\n"
         "\n"
         "EXAMPLE USES:\n"
-        "  %.*s -b bnf/numbers.bnf -n 10 -r \""BNF_STR_RULE_OPEN"number"BNF_STR_RULE_CLOSE"\" -s -t 10 -v\n"
+        "  %.*s -b bnf/numbers.bnf -n 10 -r \""BNF_STR_RULE_OPEN"number"BNF_STR_RULE_CLOSE"\" -s -t 10\n"
         "\n",
         FILENAME_MAX, path
     );
@@ -249,6 +273,7 @@ int main(
     char const* root_str            = NULL;
     size_t root_len                 = 0;
     bool* const is_arg_processed    = mem_calloc((size_t)argc, sizeof(bool));
+    bool is_cov_guided              = 0;
     bool unique                     = 1;
     uint32_t n                      = 100;
     uint32_t t                      = 60;
@@ -330,6 +355,18 @@ int main(
     }
 
     for (int i = argc - 1; i > 0; i--) {
+        if (LITEQ(argv[i], "-c") || LITEQ(argv[i], "--cov-guided")) {
+            is_cov_guided           = 1;
+            is_arg_processed[i]     = 1;
+            is_arg_processed[i + 1] = 1;
+        }
+    }
+    if (is_cov_guided)
+        fprintf_verbose(stderr, "COV_GUIDANCE = Enabled");
+    else
+        fprintf_verbose(stderr, "COV_GUIDANCE = Disabled");
+
+    for (int i = argc - 1; i > 0; i--) {
         if (is_arg_processed[i]) continue;
 
         if (LITEQ(argv[i], "-r") || LITEQ(argv[i], "--root")) {
@@ -387,10 +424,6 @@ int main(
                 showErrorBadNumber(argv[i], argv[i + 1]);
                 free(is_arg_processed);
                 return EXIT_FAILURE;
-            }
-            if (n == 0) {
-                free(is_arg_processed);
-                return EXIT_SUCCESS;
             }
             if (n > MAX_N) {
                 showErrorNumberTooLarge(n);
@@ -458,7 +491,7 @@ int main(
         fprintf_verbose(stderr, "Root Rule = %.*s", root_str_item.sz, root_str_item.p);
     }
 
-    generateAndPrintNSentencesWithinTSeconds(ast, n, t, unique);
+    generateAndPrintNSentencesWithinTSeconds(ast, n, t, is_cov_guided, unique);
 
     fprintf_verbose(stderr, "# Terms (Not-Covered) = %"PRIu32, ast->n_terms_not_covered);
     fprintf_verbose(stderr, "# Terms (Covered-Once) = %"PRIu32, ast->n_terms_covered_once);
