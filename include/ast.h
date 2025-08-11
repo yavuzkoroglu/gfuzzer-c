@@ -7,7 +7,7 @@
     #define AST_MAX_LEN_EXPANSION   (4096)
     #define AST_MAX_N_EXPANSIONS    (29)
 
-    #define NOT_AN_ASTREE           ((ASTree){ { NOT_A_CHUNK }, { NOT_AN_ITBL }, { NOT_AN_ALIST }, 0, 0, 0, 0 })
+    #define NOT_AN_ASTREE           ((ASTree){ { NOT_A_CHUNK }, { NOT_AN_ITBL }, 0, 0, 0, 0 })
 
     typedef struct ASTreeBody {
         Chunk       chunk[1];
@@ -32,7 +32,9 @@
         uint32_t    expansion_ids[AST_MAX_N_EXPANSIONS];
     } ASTreeNode;
 
-    void constructFromBNF_ast(
+    #define AST_OK                  (0)
+    #define AST_SYNTAX_ERROR        (1)
+    int constructFromBNF_ast(
         ASTree* const ast,
         FILE* const bnf_file,
         char const* const root_str,
@@ -41,10 +43,10 @@
 
     void destruct_ast(ASTree* const ast);
 
-    char* expandRandom_ast(
+    Item expandRandom_ast(
         Chunk* const str_builder,
         IndexTable* const str_builder_tbl,
-        ASTree const* const ast,
+        ASTree* const ast,
         uint32_t const parent_id,
         bool const is_cov_guided,
         bool const unique

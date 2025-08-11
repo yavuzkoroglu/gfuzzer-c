@@ -1,11 +1,24 @@
 #include <inttypes.h>
 #include <string.h>
 #include "ast.h"
+#include "bnf.h"
 #include "padkit/memalloc.h"
 #include "padkit/verbose.h"
 
 #define MAX_N       (4194304)
 #define MAX_TIMEOUT (604800)
+
+static void generateAndPrintNSentencesWithinTSeconds(
+    ASTree* const ast,
+    uint32_t const n,
+    uint32_t const t,
+    bool const unique
+) {
+    (void)ast;
+    (void)n;
+    (void)t;
+    (void)unique;
+}
 
 static void showCopyright(void) {
     fputs(
@@ -99,6 +112,51 @@ static void showErrorNumberTooLarge(uint32_t const n) {
     );
 }
 
+static void showErrorRootStrMissing(void) {
+    fputs(
+        "\n"
+        "[ERROR] - Must specify a \"<RULE>\" file with -r or --root\n"
+        "\n"
+        "gfuzzer --help for more instructions\n"
+        "\n",
+        stderr
+    );
+}
+
+static void showErrorRootStrTooLong(char const* const root_str) {
+    fprintf(
+        stderr,
+        "\n"
+        "[ERROR] - The root rule cannot have more than NOT %d characters)\n"
+        "        - The root rule: %.*s"
+        "\n"
+        "gfuzzer --help for more instructions\n"
+        "\n",
+        AST_MAX_LEN_TOKEN, AST_MAX_LEN_TOKEN, root_str
+    );
+}
+
+static void showErrorRootStrBadFormat(char const* const root_str) {
+    fprintf(
+        stderr,
+        "\n"
+        "[ERROR] - Syntax Error @ \""BNF_STR_RULE_OPEN"RULE"BNF_STR_RULE_CLOSE"\" (%.*s)\n"
+        "\n"
+        "gfuzzer --help for more instructions\n"
+        "\n",
+        AST_MAX_LEN_TOKEN, root_str
+    );
+}
+
+static void showErrorSyntax(void) {
+    fputs(
+        "\n"
+        "[ERROR] - Bad Syntax @ BNF\n"
+        "\n",
+        stderr
+    );
+}
+
 static void showErrorTimeoutMissing(void) {
     fputs(
         "\n"
@@ -133,8 +191,9 @@ static void showErrorTimeoutTooLarge(uint32_t const t) {
     );
 }
 
-static void showUsage(void) {
-    fputs(
+static void showUsage(char const* const path) {
+    fprintf(
+        stderr,
         "\n"
         "gfuzzer-c: Grammar Fuzzer in C\n"
         "\n"
@@ -145,15 +204,25 @@ static void showUsage(void) {
         "  -C,--copyright               Output the copyright message and exit\n"
         "  -h,--help                    Output this help message and exit\n"
         "  -n,--number NUMBER           The number of sentences (Default: 100)\n"
-        "  -r,--root                    The root rule (Default: The first rule in the BNF-FILE)\n"
+        "  -r,--root \""
+                      BNF_STR_RULE_OPEN
+                      "RULE"
+                          BNF_STR_RULE_CLOSE
+                          "\"           The root rule (Default: The first rule in the BNF-FILE)\n"
         "  -s,--same                    Allow the same sentence twice (Default: Do NOT allow / UNIQUE = true)\n"
         "  -t,--timeout TIMEOUT         Terminate generating sentences after some seconds (Default: 60)\n"
         "  -v,--verbose                 Timestamped status information (including token coverage) to stdout\n"
         "  -V,--version                 Output version number and exit\n"
         "\n"
+        BNF_STR_RULE_OPEN"RULE"BNF_STR_RULE_CLOSE" FORMAT:\n"
+        "  * Every rule must begin with '"BNF_STR_RULE_OPEN"'.\n"
+        "  * Every rule must end with '"BNF_STR_RULE_CLOSE"'.\n"
+        "  * Rules cannot contain whitespace.\n"
+        "\n"
         "EXAMPLE USES:\n"
+        "  %.*s -b bnf/numbers.bnf -n 10 -r \""BNF_STR_RULE_OPEN"number"BNF_STR_RULE_CLOSE"\" -s -t 10 -v\n"
         "\n",
-        stderr
+        FILENAME_MAX, path
     );
 }
 
@@ -174,17 +243,18 @@ int main(
     int argc,
     char* argv[]
 ) {
+    ASTree ast[1]                   = { NOT_AN_ASTREE };
     FILE* bnf_file                  = NULL;
     char const* bnf_filename        = NULL;
     char const* root_str            = NULL;
-    uint32_t const root_len         = 0;
+    size_t root_len                 = 0;
     bool* const is_arg_processed    = mem_calloc((size_t)argc, sizeof(bool));
     bool unique                     = 1;
     uint32_t n                      = 100;
     uint32_t t                      = 60;
 
     if (argc <= 1) {
-        showUsage();
+        showUsage(argv[0]);
         free(is_arg_processed);
         return EXIT_SUCCESS;
     }
@@ -207,7 +277,7 @@ int main(
 
     for (int i = argc - 1; i > 0; i--) {
         if (LITEQ(argv[i], "-h") || LITEQ(argv[i], "--help")) {
-            showUsage();
+            showUsage(argv[0]);
             free(is_arg_processed);
             return EXIT_SUCCESS;
         }
@@ -263,23 +333,28 @@ int main(
         if (is_arg_processed[i]) continue;
 
         if (LITEQ(argv[i], "-r") || LITEQ(argv[i], "--root")) {
-            if (i == argc - 1) {
-                showErrorRootMissing();
+            root_str = argv[i + 1];
+            if (root_str[0] == '-') {
+                showErrorRootStrMissing();
                 free(is_arg_processed);
                 return EXIT_FAILURE;
             }
-            bnf_filename = argv[i + 1];
-            if (bnf_filename[0] == '-') {
-                showErrorBNFFilenameMissing();
+            root_len = strlen(root_str);
+            if (root_len > AST_MAX_LEN_TOKEN) {
+                showErrorRootStrTooLong(root_str);
                 free(is_arg_processed);
                 return EXIT_FAILURE;
             }
-            if (strlen(bnf_filename) > FILENAME_MAX) {
-                showErrorBNFFilenameTooLong();
+            if (
+                root_len < sizeof(BNF_STR_RULE_OPEN) + sizeof(BNF_STR_RULE_CLOSE) - 1               ||
+                memcmp(root_str, BNF_STR_RULE_OPEN, sizeof(BNF_STR_RULE_OPEN) - 1) != 0             ||
+                !LITEQ(root_str + root_len + 1 - sizeof(BNF_STR_RULE_CLOSE), BNF_STR_RULE_CLOSE)    ||
+                strcspn(root_str, " \f\n\r\t\v") != root_len
+            ) {
+                showErrorRootStrBadFormat(root_str);
                 free(is_arg_processed);
                 return EXIT_FAILURE;
             }
-            printf_verbose("BNF File = %.*s", FILENAME_MAX, bnf_filename);
             is_arg_processed[i]     = 1;
             is_arg_processed[i + 1] = 1;
             break;
@@ -366,7 +441,7 @@ int main(
         free(is_arg_processed);
         return EXIT_FAILURE;
     }
-    switch (constructFromBNF_ast(ast, bnf_file, root_str, root_len)) {
+    switch (constructFromBNF_ast(ast, bnf_file, root_str, (uint32_t)root_len)) {
         case AST_OK:
             break;
         case AST_SYNTAX_ERROR:
@@ -377,6 +452,11 @@ int main(
             return EXIT_FAILURE;
     }
     fclose(bnf_file);
+    if (verbose) {
+        ASTreeNode const* const root    = getNode_ast(ast, ast->root_id);
+        Item const root_str_item        = get_chunk(ast->chunk, root->str_id);
+        printf_verbose("Root Rule = %.*s", root_str_item.sz, root_str_item.p);
+    }
 
     generateAndPrintNSentencesWithinTSeconds(ast, n, t, unique);
 

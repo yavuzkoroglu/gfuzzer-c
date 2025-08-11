@@ -1,12 +1,15 @@
 #include <assert.h>
 #include <ctype.h>
+#include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
 #include "ast.h"
+#include "bnf.h"
 #include "padkit/hash.h"
 #include "padkit/implication.h"
 #include "padkit/invalid.h"
 #include "padkit/size.h"
+#include "padkit/verbose.h"
 
 #ifdef LITEQ
     #undef LITEQ
@@ -22,9 +25,9 @@ int constructFromBNF_ast(
     ASTreeNode* parent;
     ASTreeNode* child;
     ASTreeExpansion* expansion;
-    IndexMapping* mapping;
     bool ins_result;
     char token_str[AST_MAX_LEN_TOKEN];
+    char exp_str[AST_MAX_LEN_EXPANSION];
 
     assert(ast != NULL);
     assert(bnf_file != NULL);
@@ -41,9 +44,13 @@ int constructFromBNF_ast(
     ast->n_tokens_total         = 0;
 
     addF_chunk(ast->chunk, bnf_file, BNF_MAX_SZ_FILE, BUFSIZ);
-    cutByDelimLast_chunk(ast->chunk, "\n");
+    printf_verbose("AST: # BNF size = %"PRIu32" bytes", AREA_CHUNK(ast->chunk));
 
-    for (uint32_t line_id = LEN_CHUNK(ast->chunk) - 1; line_id > 0; i--) {
+    cutByDelimLast_chunk(ast->chunk, "\n");
+    printf_verbose("AST: # Lines in BNF = %"PRIu32, LEN_CHUNK(ast->chunk));
+
+    for (uint32_t line_id = LEN_CHUNK(ast->chunk) - 1; line_id > 0; line_id--) {
+        IndexMapping* mapping       = NULL;
         Item const line             = get_chunk(ast->chunk, line_id);
         char const* const line_str  = (char*)line.p;
         uint32_t i                  = 0;
@@ -52,6 +59,8 @@ int constructFromBNF_ast(
         uint32_t token_len          = 0;
         uint_fast64_t token_index   = 0;
         uint_fast64_t exp_index     = 0;
+
+        printf_verbose("AST: Line = %"PRIu32": \"%.*s\"", line_id, (int)line.sz, line_str);
 
         /* Skip spaces */
         while (i < line.sz && isspace(line_str[i])) i++;
@@ -81,27 +90,25 @@ int constructFromBNF_ast(
             mapping,
             ast->chunktbl,
             token_index,
-            LEN_CHUNK(chunk),
+            LEN_CHUNK(ast->chunk),
             ITBL_BEHAVIOR_RESPECT,
             ITBL_RELATION_ONE_TO_ONE
         );
         if (ins_result == ITBL_INSERT_UNIQUE) {
-            if (root_str == NULL && LEN_CHUNK(ast->chunk) == 0)
-                ast->root_id = 0;
-            else if (token_len == root_len && memcmp(token_str, root_str, token_len) == 0)
+            if (root_str == NULL || (token_len == root_len && memcmp(token_str, root_str, token_len) == 0))
                 ast->root_id = LEN_CHUNK(ast->chunk);
 
             add_chunk(ast->chunk, token_str, token_len);
             parent                  = addIndeterminate_chunk(ast->chunk, sizeof(ASTreeNode)).p;
             parent->cov_count       = 0;
-            parent->str_id          = LEN_CHUNK(chunk) - 2;
+            parent->str_id          = LEN_CHUNK(ast->chunk) - 2;
             parent->n_expansions    = 0;
 
             ast->n_tokens_total++;
             ast->n_tokens_not_covered++;
         } else {
             parent = get_chunk(ast->chunk, mapping->value).p;
-            assert(isValid_astn(parent));
+            assert(isValid_astn(ast, parent));
         }
 
         /* Skip BNF_STR_RULE_CLOSE */
@@ -164,23 +171,23 @@ int constructFromBNF_ast(
                 exp_len += sizeof(BNF_STR_RULE_CLOSE) - 1;
                 if (exp_len > AST_MAX_LEN_EXPANSION)                return AST_SYNTAX_ERROR;
                 expansion->str_id = INVALID_UINT32;
-                exp_index = hash64_str(exp_str, exp_len);
+                exp_index = hash64_str(line_str + i, exp_len);
                 ins_result  = insert_itbl(
                     mapping,
                     ast->chunktbl,
                     exp_index,
-                    LEN_CHUNK(chunk),
+                    LEN_CHUNK(ast->chunk),
                     ITBL_BEHAVIOR_RESPECT,
                     ITBL_RELATION_ONE_TO_ONE
                 );
                 if (ins_result == ITBL_INSERT_UNIQUE) {
-                    if (root_str != NULL && exp_len == root_len && memcmp(exp_str, root_str, exp_len) == 0)
+                    if (root_str != NULL && exp_len == root_len && memcmp(line_str + i, root_str, exp_len) == 0)
                         ast->root_id = LEN_CHUNK(ast->chunk);
 
                     add_chunk(ast->chunk, token_str, token_len);
                     child               = addIndeterminate_chunk(ast->chunk, sizeof(ASTreeNode)).p;
                     child->cov_count    = 0;
-                    child->str_id       = LEN_CHUNK(chunk) - 2;
+                    child->str_id       = LEN_CHUNK(ast->chunk) - 2;
                     child->n_expansions = 0;
 
                     ast->n_tokens_total++;
@@ -222,7 +229,7 @@ int constructFromBNF_ast(
                     expansion->cov_count    = 0;
                     expansion->next_id      = INVALID_UINT32;
                 }
-            } else if (isspace(line_str + i)) {
+            } else if (isspace(line_str[i])) {
                 /* Skip spaces */
                 i++;
             } else {
@@ -246,7 +253,7 @@ void destruct_ast(ASTree* const ast) {
 Item expandRandom_ast(
     Chunk* const str_builder,
     IndexTable* const str_builder_tbl,
-    ASTree const* const ast,
+    ASTree* const ast,
     uint32_t const root_id,
     bool const is_cov_guided,
     bool const unique
@@ -256,12 +263,7 @@ Item expandRandom_ast(
     assert(isValid_ast(ast));
     assert(root_id < LEN_CHUNK(ast->chunk));
 
-    /* Must create an item with size 0 within str_builder */
-    /* However, Chunk does not allow 0 size items. */
-    /* The following code hacks str_builder and temporarily creates an item of size 0 */
-    addIndeterminate_chunk(str_builder, BUFSIZ);
-    deleteLastN_alist(str_builder->items, BUFSIZ);
-
+    addIndeterminate_chunk(str_builder, 0);
     {
         ArrayList stack[1]  = { NOT_AN_ALIST };
         uint32_t stack_id   = 0;
@@ -269,8 +271,8 @@ Item expandRandom_ast(
 
         pushTop_alist(stack, &root_id);
         while (stack_id < stack->len) {
-            uint32_t const parent_id    = get_alist(stack, stack_id++);
-            ASTreeNode* const parent    = getNode_ast(ast, parent_id);
+            uint32_t const parent_id    = *(uint32_t*)get_alist(stack, stack_id++);
+            ASTreeNode* parent          = getNode_ast(ast, parent_id);
             if (parent->cov_count == 0) {
                 assert(ast->n_tokens_covered_once > 0);
                 ast->n_tokens_covered_once--;
@@ -282,28 +284,30 @@ Item expandRandom_ast(
 
             if (parent->n_expansions == 0) {
                 Item const parent_item = get_chunk(ast->chunk, parent_id);
-                appendLast_chunk(ast->chunk, parent_item.p, parent_item.sz);
+                appendLast_chunk(str_builder, parent_item.p, parent_item.sz);
             } else {
                 uint32_t child_id = 0;
                 if (is_cov_guided) {
-                    uint32_t cov_count  = 0;
-                    uint32_t i          = 0;
-                    while (i < n_expansions) {
-                        child_id = parent->expansions[i];
+                    uint32_t i = 0;
+                    while (i < parent->n_expansions) {
+                        child_id = parent->expansion_ids[i];
                         {
-                            ASTreeNodeExpansion const* child    = getExpansion_ast(ast, child_id);
-                            cov_count                           = child;
+                            Item const child_item               = get_chunk(ast->chunk, child_id);
+                            ASTreeExpansion const* const child  = child_item.p;
+                            assert(child_item.sz == sizeof(ASTreeExpansion*));
+                            if (child->cov_count == 0) break;
                         }
-                        if (cov_count > 0) break;
                         i++;
                     }
-                    if (i == n_expansions) child_id = rand() % n_expansions;
+                    if (i == parent->n_expansions) child_id = (uint32_t)rand() % parent->n_expansions;
                 } else {
-                    child_id = rand() % n_expansions;
+                    child_id = (uint32_t)rand() % parent->n_expansions;
                 }
 
                 {
-                    ASTreeNodeExpansion* child = getExpansion_ast(ast, child_id);
+                    Item const child_item   = get_chunk(ast->chunk, child_id);
+                    ASTreeExpansion* child  = child_item.p;
+                    assert(child_item.sz == sizeof(ASTreeExpansion*));
                     child->cov_count++;
                     assert(ast->n_tokens_covered_once > 0);
                     ast->n_tokens_not_covered--;
@@ -311,9 +315,9 @@ Item expandRandom_ast(
                     while (child != NULL) {
                         if (isTerminal_aste(ast, child)) {
                             Item const exp_item = get_chunk(ast->chunk, child->str_id);
-                            appendLast_chunk(ast->chunk, exp_item.p, exp_item.sz);
+                            appendLast_chunk(str_builder, exp_item.p, exp_item.sz);
                         } else {
-                            pushTop_alist(stack, child->node_id);
+                            pushTop_alist(stack, &(child->node_id));
                         }
                         child = next_aste(ast, child);
                     }
@@ -327,19 +331,20 @@ Item expandRandom_ast(
     {
         Item const item             = getLast_chunk(str_builder);
         uint_fast64_t const index   = hash64_str(item.p, item.sz);
-        IndexMapping const* mapping = findFirstMapping_itbl(str_builder_tbl, index);
-        while (mapping != NULL) {
-            Item const dup          = get_chunk(str_builder, mapping->value);
-            if (areEquiv_item(item, dup)) {
-                deleteLast_chunk(str_builder);
-                if (unique)
-                    return NULL;
-                else
-                    return dup;
-            }
-            mapping = nextMapping_itbl(str_builder_tbl, mapping);
+        int const ins_result        = insert_itbl(
+            NULL,
+            str_builder_tbl,
+            index,
+            LEN_CHUNK(str_builder) - 1,
+            ITBL_RELATION_ONE_TO_ONE,
+            ITBL_BEHAVIOR_RESPECT
+        );
+        if (unique && ins_result == ITBL_INSERT_NOT_UNIQUE) {
+            deleteLast_chunk(str_builder);
+            return NOT_AN_ITEM;
+        } else {
+            return item;
         }
-        return item;
     }
 }
 
@@ -348,9 +353,9 @@ ASTreeNode* getNode_ast(
     uint32_t const node_id
 ) {
     assert(isValid_ast(ast));
-    assert(parent_id < LEN_CHUNK(ast->chunk));
+    assert(node_id < LEN_CHUNK(ast->chunk));
     {
-        Item const item = get_chunk(ast->chunk, parent_id);
+        Item const item = get_chunk(ast->chunk, node_id);
         assert(item.sz == sizeof(ASTreeNode));
         assert(isValid_astn(ast, item.p));
         return item.p;
@@ -380,14 +385,14 @@ bool isTerminal_aste(
 }
 
 bool isValid_ast(ASTree const* const ast) {
-    if (ast == NULL)                                                    return 0;
-    if (!isValid_chunk(ast->chunk))                                     return 0;
-    if (!isValid_itbl(ast->chunktbl))                                   return 0;
-    if (root_id >= LEN_CHUNK(chunk))                                    return 0;
-    if (n_tokens_total >= LEN_CHUNK(chunk))                             return 0;
-    if (n_tokens_not_covered >= LEN_CHUNK(chunk))                       return 0;
-    if (n_tokens_covered_once >= LEN_CHUNK(chunk))                      return 0;
-    if (n_tokens_covered_once + n_tokens_not_covered != n_tokens_total) return 0;
+    if (ast == NULL)                                                                    return 0;
+    if (!isValid_chunk(ast->chunk))                                                     return 0;
+    if (!isValid_itbl(ast->chunktbl))                                                   return 0;
+    if (ast->root_id >= LEN_CHUNK(ast->chunk))                                          return 0;
+    if (ast->n_tokens_total >= LEN_CHUNK(ast->chunk))                                   return 0;
+    if (ast->n_tokens_not_covered >= LEN_CHUNK(ast->chunk))                             return 0;
+    if (ast->n_tokens_covered_once >= LEN_CHUNK(ast->chunk))                            return 0;
+    if (ast->n_tokens_covered_once + ast->n_tokens_not_covered != ast->n_tokens_total)  return 0;
 
     return 1;
 }
