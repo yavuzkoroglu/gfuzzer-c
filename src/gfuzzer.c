@@ -262,7 +262,7 @@ int main(
     GrammarGraph graph[1]           = { NOT_A_GGRAPH };
     FILE* bnf_file                  = NULL;
     char const* bnf_filename        = NULL;
-    char const* root_str            = NULL;
+    char* root_str                  = NULL;
     size_t root_len                 = 0;
     bool* const is_arg_processed    = mem_calloc((size_t)argc, sizeof(bool));
     bool is_cov_guided              = DEFAULT_COV_GUIDED;

@@ -36,7 +36,7 @@
     int construct_ggraph(
         GrammarGraph* const graph,
         FILE* const bnf_file,
-        char const* const root_str,
+        char* const root_str,
         uint32_t const root_len
     );
 

@@ -1,5 +1,7 @@
 #include <assert.h>
+#include <ctype.h>
 #include <inttypes.h>
+#include <string.h>
 #include "bnf.h"
 #include "grammargraph.h"
 #include "padkit/indextable.h"
@@ -24,6 +26,7 @@
         (i == line_sz || line_begin[i] == '\0' || LITEQ(line_begin + i, BNF_STR_LINE_COMMENT))
 
 static int addRule(
+    RuleTerm** parent,
     GrammarGraph* const graph,
     IndexTable* const rule_tbl,
     char const* const line_begin,
@@ -31,13 +34,26 @@ static int addRule(
     uint32_t* const i
 );
 
+static int determineRootRule(
+    GrammarGraph* const graph,
+    IndexTable* const rule_tbl,
+    char* const root_str,
+    uint32_t const root_len
+);
+
 static int load_ggraph(
     GrammarGraph* const graph,
     IndexTable* const rule_tbl,
     IndexTable* const terminal_tbl,
     Chunk* const lines,
-    char const* const root_str,
+    char* const root_str,
     uint32_t const root_len
+);
+
+static int skipEquiv(
+    char const* const line_begin,
+    uint32_t const line_sz,
+    uint32_t* const i
 );
 
 static int skipSpaces(
@@ -47,7 +63,7 @@ static int skipSpaces(
 );
 
 static int addRule(
-    RuleTerm** parent;
+    RuleTerm** parent,
     GrammarGraph* const graph,
     IndexTable* const rule_tbl,
     char const* const line_begin,
@@ -59,16 +75,15 @@ static int addRule(
     bool ins_result;
 
     Item term   = add_chunk(graph->rule_names, BNF_STR_RULE_OPEN, sizeof(BNF_STR_RULE_OPEN) - 1);
-    uint32_t j  = i + term.sz;
+    uint32_t j  = *i + term.sz;
 
-    if (LITNEQ(line_begin + i, BNF_STR_RULE_OPEN))  return GRAMMAR_SYNTAX_ERROR;
+    if (LITNEQ(line_begin + *i, BNF_STR_RULE_OPEN)) return GRAMMAR_SYNTAX_ERROR;
     if (j == line_sz || isspace(line_begin[j]))     return GRAMMAR_SYNTAX_ERROR;
     while (LITNEQ(line_begin + j, BNF_STR_RULE_CLOSE)) {
         term = appendLast_chunk(graph->rule_names, line_begin + j++, 1);
         if (j == line_sz || isspace(line_begin[j]) || term.sz >= BNF_MAX_LEN_TERM) return GRAMMAR_SYNTAX_ERROR;
     }
-
-    *i += terminal.sz;
+    *i = j + sizeof(BNF_STR_RULE_CLOSE) - 1;
 
     term_index  = hash64_item(term);
     mapping     = insert_itbl(
@@ -80,18 +95,18 @@ static int addRule(
         ITBL_RELATION_ONE_TO_ONE
     );
     if (ins_result == ITBL_INSERT_UNIQUE) {
-        *parent         = addZeros_alist(graph->rule_list);
-        parent->name_id = LEN_CHUNK(graph->rule_names) - 1;
-        constructEmpty_alist(parent->expansion_id_list, sizeof(uint32_t), ALIST_RECOMMENDED_INITIAL_CAP);
+        *parent             = addZeros_alist(graph->rule_list);
+        parent[0]->name_id  = LEN_CHUNK(graph->rule_names) - 1;
+        constructEmpty_alist(parent[0]->expansion_id_list, sizeof(uint32_t), ALIST_RECOMMENDED_INITIAL_CAP);
     } else {
         RuleTerm* dup_term  = get_alist(graph->rule_list, mapping->value);
         Item dup_name       = get_chunk(graph->rule_names, dup_term->name_id);
         while (!areEquiv_item(dup_name, term)) {
             if (mapping->next_id >= rule_tbl->mappings->len) {
-                mapping->next_id    = table->mappings->len;
-                mapping             = addIndeterminate_alist(table->mappings);
+                mapping->next_id    = rule_tbl->mappings->len;
+                mapping             = addIndeterminate_alist(rule_tbl->mappings);
                 mapping->index      = term_index;
-                mapping->value      = rule_list->len;
+                mapping->value      = graph->rule_list->len;
                 mapping->next_id    = INVALID_UINT32;
                 add_alist(graph->rule_list, *parent);
                 return GRAMMAR_OK;
@@ -101,8 +116,9 @@ static int addRule(
             dup_name    = get_chunk(graph->rule_names, dup_term->name_id);
         }
         *parent = dup_term;
-        return GRAMMAR_OK;
+        deleteLast_chunk(graph->rule_names);
     }
+    return GRAMMAR_OK;
 }
 
 bool isValid_ggraph(GrammarGraph const* const graph) {
@@ -120,7 +136,7 @@ bool isValid_ggraph(GrammarGraph const* const graph) {
 int construct_ggraph(
     GrammarGraph* const graph,
     FILE* const bnf_file,
-    char const* const root_str,
+    char* const root_str,
     uint32_t const root_len
 ) {
     Chunk lines[1]              = { NOT_A_CHUNK };
@@ -166,6 +182,32 @@ void destruct_ggraph(GrammarGraph* const graph) {
     destruct_alist(graph->expansion_list);
 
     *graph = NOT_A_GGRAPH;
+}
+
+static int determineRootRule(
+    GrammarGraph* const graph,
+    IndexTable* const rule_tbl,
+    char* const root_str,
+    uint32_t const root_len
+) {
+    if (root_str == NULL) {
+        graph->root_rule_id = 0;
+        return GRAMMAR_OK;
+    } else {
+        Item const root             = { root_str, root_len, 0 };
+        uint_fast64_t root_index    = hash64_item(root);
+        IndexMapping* mapping       = findFirstMapping_itbl(rule_tbl, root_index);
+        while (mapping != NULL) {
+            RuleTerm const* const rule  = get_alist(graph->rule_list, mapping->value);
+            Item const rule_name        = get_chunk(graph->rule_names, rule->name_id);
+            if (areEquiv_item(root, rule_name)) {
+                graph->root_rule_id = mapping->value;
+                return GRAMMAR_OK;
+            }
+            mapping = nextMapping_itbl(rule_tbl, mapping);
+        }
+        return GRAMMAR_SYNTAX_ERROR;
+    }
 }
 
 int generateSentence_ggraph(
@@ -258,12 +300,10 @@ static int load_ggraph(
     IndexTable* const rule_tbl,
     IndexTable* const terminal_tbl,
     Chunk* const lines,
-    char const* root_str,
+    char* const root_str,
     uint32_t const root_len
 ) {
     int load_res = GRAMMAR_OK;
-    uint32_t term_len;
-    uint_fast64_t term_index;
 
     assert(graph != NULL);
     assert(isValid_itbl(rule_tbl));
@@ -273,6 +313,8 @@ static int load_ggraph(
     for (uint32_t line_id = 0; line_id < LEN_CHUNK(lines); line_id++) {
         Item const line                 = get_chunk(lines, line_id);
         char const* const line_begin    = line.p;
+        RuleTerm* parent;
+        ExpansionTerm* expansion;
         uint32_t i;
         uint32_t j;
 
@@ -282,12 +324,30 @@ static int load_ggraph(
 
         if (IS_COMMENT_OR_EMPTY(line_begin, i, line.sz)) continue;
 
-        load_res = addRule(graph, rule_tbl, line_begin, line,sz, &i);
+        load_res = addRule(&parent, graph, rule_tbl, line_begin, line.sz, &i);
         if (load_res != GRAMMAR_OK) return GRAMMAR_SYNTAX_ERROR;
+
+        load_res = skipSpaces(line_begin, line.sz, &i);
+        assert(load_res == GRAMMAR_OK);
+
+        load_res = skipEquiv(line_begin, line.sz, &i);
+        if (load_res != GRAMMAR_OK) return GRAMMAR_SYNTAX_ERROR;
+
+        load_res = skipSpaces(line_begin, line.sz, &i);
+        assert(load_res == GRAMMAR_OK);
+
+        /* Cannot have empty expansion */
+        if (i == line.sz || line_begin[i] == '\0') return GRAMMAR_SYNTAX_ERROR;
+
+        (void)expansion;
+        (void)j;
     }
 
     load_res = determineRootRule(graph, rule_tbl, root_str, root_len);
-    return GRAMMAR_OK;
+    if (load_res != GRAMMAR_OK)
+        return GRAMMAR_SYNTAX_ERROR;
+    else
+        return GRAMMAR_OK;
 }
 
 uint32_t nTerms_ggraph(GrammarGraph const* const graph) {
@@ -301,6 +361,18 @@ static int skipSpaces(
     uint32_t* const i
 ) {
     while (*i < line_sz || isspace(line_begin[*i])) (*i)++;
+    return GRAMMAR_OK;
+}
+
+static int skipEquiv(
+    char const* const line_begin,
+    uint32_t const line_sz,
+    uint32_t* const i
+) {
+    if (*i == line_sz || line_begin[*i] == '\0')    return GRAMMAR_SYNTAX_ERROR;
+    if (LITNEQ(line_begin + *i, BNF_STR_EQUIV))     return GRAMMAR_SYNTAX_ERROR;
+
+    *i += sizeof(BNF_STR_EQUIV) - 1;
     return GRAMMAR_OK;
 }
 

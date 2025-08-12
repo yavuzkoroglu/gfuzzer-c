@@ -1,0 +1,104 @@
+src/grammargraph.c:63:22: error: expected ')'
+   63 |     RuleTerm** parent;
+      |                      ^
+src/grammargraph.c:62:19: note: to match this '('
+   62 | static int addRule(
+      |                   ^
+src/grammargraph.c:62:12: error: conflicting types for 'addRule'
+   62 | static int addRule(
+      |            ^
+src/grammargraph.c:26:12: note: previous declaration is here
+   26 | static int addRule(
+      |            ^
+src/grammargraph.c:64:30: error: expected ';' at end of declaration
+   64 |     GrammarGraph* const graph,
+      |                              ^
+      |                              ;
+src/grammargraph.c:65:31: error: expected ';' at end of declaration
+   65 |     IndexTable* const rule_tbl,
+      |                               ^
+      |                               ;
+src/grammargraph.c:66:33: error: expected ';' at end of declaration
+   66 |     char const* const line_begin,
+      |                                 ^
+      |                                 ;
+src/grammargraph.c:67:27: error: expected ';' at end of declaration
+   67 |     uint32_t const line_sz,
+      |                           ^
+      |                           ;
+src/grammargraph.c:68:22: error: expected ';' after top level declarator
+   68 |     uint32_t* const i
+      |                      ^
+      |                      ;
+src/grammargraph.c:121:47: error: declaration shadows a variable in the global scope [-Werror,-Wshadow]
+  121 | bool isValid_ggraph(GrammarGraph const* const graph) {
+      |                                               ^
+src/grammargraph.c:64:25: note: previous declaration is here
+   64 |     GrammarGraph* const graph,
+      |                         ^
+src/grammargraph.c:134:25: error: declaration shadows a variable in the global scope [-Werror,-Wshadow]
+  134 |     GrammarGraph* const graph,
+      |                         ^
+src/grammargraph.c:64:25: note: previous declaration is here
+   64 |     GrammarGraph* const graph,
+      |                         ^
+src/grammargraph.c:140:16: error: declaration shadows a variable in the global scope [-Werror,-Wshadow]
+  140 |     IndexTable rule_tbl[1]      = { NOT_AN_ITBL };
+      |                ^
+src/grammargraph.c:65:23: note: previous declaration is here
+   65 |     IndexTable* const rule_tbl,
+      |                       ^
+src/grammargraph.c:164:42: error: declaration shadows a variable in the global scope [-Werror,-Wshadow]
+  164 | void destruct_ggraph(GrammarGraph* const graph) {
+      |                                          ^
+src/grammargraph.c:64:25: note: previous declaration is here
+   64 |     GrammarGraph* const graph,
+      |                         ^
+src/grammargraph.c:185:25: error: declaration shadows a variable in the global scope [-Werror,-Wshadow]
+  185 |     GrammarGraph* const graph,
+      |                         ^
+src/grammargraph.c:64:25: note: previous declaration is here
+   64 |     GrammarGraph* const graph,
+      |                         ^
+src/grammargraph.c:186:23: error: declaration shadows a variable in the global scope [-Werror,-Wshadow]
+  186 |     IndexTable* const rule_tbl,
+      |                       ^
+src/grammargraph.c:65:23: note: previous declaration is here
+   65 |     IndexTable* const rule_tbl,
+      |                       ^
+src/grammargraph.c:194:41: error: initializing 'void *' with an expression of type 'const char *const' discards qualifiers [-Werror,-Wincompatible-pointer-types-discards-qualifiers]
+  194 |         Item const root             = { root_str, root_len, 0 };
+      |                                         ^~~~~~~~
+src/grammargraph.c:204:40: error: incompatible pointer types passing 'Chunk[1]' (aka 'struct ChunkBody[1]') to parameter of type 'const IndexTable *' (aka 'const struct IndexTableBody *') [-Werror,-Wincompatible-pointer-types]
+  204 |             mapping = nextMapping_itbl(graph->rule_names, mapping);
+      |                                        ^~~~~~~~~~~~~~~~~
+padkit/include/padkit/indextable.h:76:33: note: passing argument to parameter 'table' here
+   76 |         IndexTable const* const table,
+      |                                 ^
+src/grammargraph.c:212:25: error: declaration shadows a variable in the global scope [-Werror,-Wshadow]
+  212 |     GrammarGraph* const graph,
+      |                         ^
+src/grammargraph.c:64:25: note: previous declaration is here
+   64 |     GrammarGraph* const graph,
+      |                         ^
+src/grammargraph.c:296:25: error: declaration shadows a variable in the global scope [-Werror,-Wshadow]
+  296 |     GrammarGraph* const graph,
+      |                         ^
+src/grammargraph.c:64:25: note: previous declaration is here
+   64 |     GrammarGraph* const graph,
+      |                         ^
+src/grammargraph.c:297:23: error: declaration shadows a variable in the global scope [-Werror,-Wshadow]
+  297 |     IndexTable* const rule_tbl,
+      |                       ^
+src/grammargraph.c:65:23: note: previous declaration is here
+   65 |     IndexTable* const rule_tbl,
+      |                       ^
+src/grammargraph.c:314:27: error: declaration shadows a variable in the global scope [-Werror,-Wshadow]
+  314 |         char const* const line_begin    = line.p;
+      |                           ^
+src/grammargraph.c:66:23: note: previous declaration is here
+   66 |     char const* const line_begin,
+      |                       ^
+fatal error: too many errors emitted, stopping now [-ferror-limit=]
+20 errors generated.
+make: *** [obj/grammargraph.o] Error 1
