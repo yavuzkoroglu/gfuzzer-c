@@ -313,18 +313,15 @@ static int load_ggraph(
     for (uint32_t line_id = 0; line_id < LEN_CHUNK(lines); line_id++) {
         Item const line                 = get_chunk(lines, line_id);
         char const* const line_begin    = line.p;
-        RuleTerm* parent;
-        ExpansionTerm* expansion;
-        uint32_t i;
-        uint32_t j;
+        uint32_t i                      = 0;
+        RuleTerm* parent_rule;
 
-        i = 0;
         load_res = skipSpaces(line_begin, line.sz, &i);
         assert(load_res == GRAMMAR_OK);
 
         if (IS_COMMENT_OR_EMPTY(line_begin, i, line.sz)) continue;
 
-        load_res = addRule(&parent, graph, rule_tbl, line_begin, line.sz, &i);
+        load_res = addRule(&parent_rule, graph, rule_tbl, line_begin, line.sz, &i);
         if (load_res != GRAMMAR_OK) return GRAMMAR_SYNTAX_ERROR;
 
         load_res = skipSpaces(line_begin, line.sz, &i);
@@ -336,11 +333,8 @@ static int load_ggraph(
         load_res = skipSpaces(line_begin, line.sz, &i);
         assert(load_res == GRAMMAR_OK);
 
-        /* Cannot have empty expansion */
-        if (i == line.sz || line_begin[i] == '\0') return GRAMMAR_SYNTAX_ERROR;
-
-        (void)expansion;
-        (void)j;
+        load_res = addExpansions(graph, expansion_tbl, parent_rule, line_begin, line.sz, &i);
+        if (load_res != GRAMMAR_OK) return GRAMMAR_SYNTAX_ERROR;
     }
 
     load_res = determineRootRule(graph, rule_tbl, root_str, root_len);
