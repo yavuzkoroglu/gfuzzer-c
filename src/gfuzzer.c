@@ -501,11 +501,9 @@ int main(
     }
     fclose(bnf_file);
 
-    /*
     fprintf_verbose(stderr, "# Terms (Covered-Once) = %"PRIu32, graph->n_terms_covered_once);
     fprintf_verbose(stderr, "# Terms (Total) = %"PRIu32, nTerms_ggraph(graph));
     fprintf_verbose(stderr, "Term Coverage = %"PRIu32"%%", termCov_ggraph(graph));
-    */
     fprintf_verbose(stderr, "Finished.");
 
     free(is_arg_processed);
