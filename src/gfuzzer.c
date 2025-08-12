@@ -2,8 +2,8 @@
 #include <inttypes.h>
 #include <string.h>
 #include <time.h>
-#include "ast.h"
 #include "bnf.h"
+#include "grammargraph.h"
 #include "padkit/memalloc.h"
 #include "padkit/verbose.h"
 
@@ -15,39 +15,6 @@
 #define DEFAULT_SEED        (131077)
 #define DEFAULT_N           (100)
 #define DEFAULT_TIMEOUT     (60)
-
-#ifdef TIME_ELAPSED
-    #undef SECONDS_ELAPSED
-#endif
-#define SECONDS_ELAPSED(ts) (difftime(time(NULL), ts))
-static void generateAndPrintNSentencesWithinTSeconds(
-    ASTree* const ast,
-    uint32_t const n,
-    uint32_t const t,
-    bool const is_cov_guided,
-    bool const unique
-) {
-    Chunk       str_builder[1];
-    IndexTable  str_builder_tbl[1];
-    time_t      ts;
-
-    assert(isValid_ast(ast));
-    assert(n <= MAX_N);
-    assert(t <= MAX_TIMEOUT);
-
-    time(&ts);
-    while (SECONDS_ELAPSED(ts) < t && LEN_CHUNK(str_builder) < n) {
-        Item const sentence = expandRandom_ast(
-            str_builder, str_builder_tbl,
-            ast, ast->root_id,
-            is_cov_guided, unique
-        );
-        if (!isValid_item(sentence)) continue;
-
-        printf("%.*s\n", (int)sentence.sz, (char*)sentence.p);
-    }
-}
-#undef SECONDS_ELAPSED
 
 static void showCopyright(void) {
     fputs(
@@ -164,7 +131,7 @@ static void showErrorRootStrTooLong(char const* const root_str) {
         "\n"
         "gfuzzer --help for more instructions\n"
         "\n",
-        AST_MAX_LEN_TERM, AST_MAX_LEN_TERM, root_str
+        BNF_MAX_LEN_TERM, BNF_MAX_LEN_TERM, root_str
     );
 }
 
@@ -176,7 +143,7 @@ static void showErrorRootStrBadFormat(char const* const root_str) {
         "\n"
         "gfuzzer --help for more instructions\n"
         "\n",
-        AST_MAX_LEN_TERM, root_str
+        BNF_MAX_LEN_TERM, root_str
     );
 }
 
@@ -265,7 +232,7 @@ static void showUsage(char const* const path) {
         "  * Rule names cannot contain whitespace.\n"
         "\n"
         "EXAMPLE USES:\n"
-        "  %.*s -b bnf/numbers.bnf -n 10 -r \""BNF_STR_RULE_OPEN"number"BNF_STR_RULE_CLOSE"\" -s -t 10\n"
+        "  %.*s -b bnf/numbers.bnf -c -n 10 -r \""BNF_STR_RULE_OPEN"number"BNF_STR_RULE_CLOSE"\" -t 10\n"
         "\n",
         DEFAULT_N, DEFAULT_SEED, DEFAULT_TIMEOUT, FILENAME_MAX, path
     );
@@ -284,11 +251,15 @@ static void showVersion(void) {
     #undef LITEQ
 #endif
 #define LITEQ(str, lit) (memcmp(str, lit, sizeof(lit)) == 0)
+#ifdef LITNEQ
+    #undef LITNEQ
+#endif
+#define LITNEQ(str, lit) (memcmp(str, lit, sizeof(lit)) != 0)
 int main(
     int argc,
     char* argv[]
 ) {
-    ASTree ast[1]                   = { NOT_AN_ASTREE };
+    GrammarGraph graph[1]           = { NOT_A_GGRAPH };
     FILE* bnf_file                  = NULL;
     char const* bnf_filename        = NULL;
     char const* root_str            = NULL;
@@ -399,7 +370,7 @@ int main(
                 return EXIT_FAILURE;
             }
             root_len = strlen(root_str);
-            if (root_len > AST_MAX_LEN_TERM) {
+            if (root_len > BNF_MAX_LEN_TERM) {
                 showErrorRootStrTooLong(root_str);
                 free(is_arg_processed);
                 return EXIT_FAILURE;
@@ -407,7 +378,7 @@ int main(
             if (
                 root_len < sizeof(BNF_STR_RULE_OPEN) + sizeof(BNF_STR_RULE_CLOSE) - 1               ||
                 memcmp(root_str, BNF_STR_RULE_OPEN, sizeof(BNF_STR_RULE_OPEN) - 1) != 0             ||
-                !LITEQ(root_str + root_len + 1 - sizeof(BNF_STR_RULE_CLOSE), BNF_STR_RULE_CLOSE)    ||
+                LITNEQ(root_str + root_len + 1 - sizeof(BNF_STR_RULE_CLOSE), BNF_STR_RULE_CLOSE)    ||
                 strcspn(root_str, " \f\n\r\t\v") != root_len
             ) {
                 showErrorRootStrBadFormat(root_str);
@@ -518,10 +489,10 @@ int main(
         free(is_arg_processed);
         return EXIT_FAILURE;
     }
-    switch (constructFromBNF_ast(ast, bnf_file, root_str, (uint32_t)root_len)) {
-        case AST_OK:
+    switch (construct_ggraph(graph, bnf_file, root_str, (uint32_t)root_len)) {
+        case GRAMMAR_OK:
             break;
-        case AST_SYNTAX_ERROR:
+        case GRAMMAR_SYNTAX_ERROR:
         default:
             showErrorSyntax();
             fclose(bnf_file);
@@ -529,21 +500,16 @@ int main(
             return EXIT_FAILURE;
     }
     fclose(bnf_file);
-    if (verbose) {
-        ASTreeNode const* const root    = getNode_ast(ast, ast->root_id);
-        Item const root_str_item        = get_chunk(ast->chunk, root->str_id);
-        fprintf_verbose(stderr, "Root Rule = %.*s", root_str_item.sz, root_str_item.p);
-    }
 
-    generateAndPrintNSentencesWithinTSeconds(ast, n, t, is_cov_guided, unique);
-
-    fprintf_verbose(stderr, "# Terms (Not-Covered) = %"PRIu32, ast->n_terms_not_covered);
-    fprintf_verbose(stderr, "# Terms (Covered-Once) = %"PRIu32, ast->n_terms_covered_once);
-    fprintf_verbose(stderr, "# Terms (Total) = %"PRIu32, ast->n_terms_total);
-    fprintf_verbose(stderr, "Term Coverage = %"PRIu32"%%", getTermCov_ast(ast));
+    /*
+    fprintf_verbose(stderr, "# Terms (Covered-Once) = %"PRIu32, graph->n_terms_covered_once);
+    fprintf_verbose(stderr, "# Terms (Total) = %"PRIu32, nTerms_ggraph(graph));
+    fprintf_verbose(stderr, "Term Coverage = %"PRIu32"%%", termCov_ggraph(graph));
+    */
     fprintf_verbose(stderr, "Finished.");
 
     free(is_arg_processed);
     return EXIT_SUCCESS;
 }
 #undef LITEQ
+#undef LITNEQ

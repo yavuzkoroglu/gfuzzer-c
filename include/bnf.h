@@ -2,6 +2,10 @@
     #define BNF_H
     #include "padkit/chunk.h"
 
+    #ifndef BNF_MAX_LEN_TERM
+        #define BNF_MAX_LEN_TERM (1024)
+    #endif
+
     #ifndef BNF_MAX_SZ_FILE
         #define BNF_MAX_SZ_FILE (1048576)
     #endif
@@ -41,9 +45,4 @@
     #ifndef BNF_STR_ALTERNATIVE
         #define BNF_STR_ALTERNATIVE "|"
     #endif
-
-    void readLinesFromFile_bnf(
-        Chunk* const lines,
-        FILE* const bnf_file
-    );
 #endif

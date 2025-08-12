@@ -1,7 +1,7 @@
 include padkit/compile.mk
 
 INCLUDE_DIRS=-Iinclude -Ipadkit/include
-OBJECTS=obj/ast.o obj/gfuzzer.o
+OBJECTS=obj/gfuzzer.o obj/grammargraph.o
 
 default: bin/gfuzzer
 
@@ -21,20 +21,19 @@ clean: ; rm -rf obj bin *.gcno *.gcda *.gcov html latex
 
 obj: ; mkdir obj
 
-obj/ast.o: .FORCE                       \
+obj/grammargraph.o: .FORCE              \
     obj                                 \
-    include/ast.h                       \
     include/bnf.h                       \
+    include/grammargraph.h              \
 	padkit/include/padkit/arraylist.h   \
 	padkit/include/padkit/chunk.h       \
-	padkit/include/padkit/hash.h        \
-	padkit/include/padkit/implication.h \
-	padkit/include/padkit/indextable.h  \
 	padkit/include/padkit/invalid.h     \
 	padkit/include/padkit/item.h        \
+	padkit/include/padkit/repeat.h      \
 	padkit/include/padkit/size.h        \
-	padkit/include/padkit/verbose.h   	\
-    ; ${COMPILE} ${INCLUDE_DIRS} src/ast.c -c -o obj/ast.o
+	padkit/include/padkit/swap.h        \
+	padkit/include/padkit/verbose.h     \
+    ; ${COMPILE} ${INCLUDE_DIRS} src/grammargraph.c -c -o obj/grammargraph.o
 
 obj/gfuzzer.o: .FORCE                 	\
     obj                                 \

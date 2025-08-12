@@ -103,8 +103,8 @@ int constructFromBNF_ast(
             parent->str_id          = LEN_CHUNK(ast->chunk) - 2;
             parent->n_expansions    = 0;
         } else {
-            Item const parent_item = get_chunk(ast->chunk, mapping->value);
-            assert(parent_item.sz == sizeof(ASTreeNode));
+            Item dup_rule_item      = get_chunk(ast->chunk, mapping->value);
+            assert(dup_item.sz == sizeof(ASTreeNode));
 
             parent = parent_item.p;
             assert(isValid_astn(ast, parent));
