@@ -24,6 +24,4 @@
         bool const is_cov_guided,
         bool const unique
     );
-
-    
 #endif
