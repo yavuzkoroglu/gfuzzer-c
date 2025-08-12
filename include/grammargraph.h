@@ -3,7 +3,7 @@
     #include "padkit/chunk.h"
     #include "padkit/indextable.h"
 
-    #define NOT_AN_ASTREE ((ASTree)){ { NOT_A_CHUNK }, { NOT_AN_ALIST }, { NOT_AN_ALIST }, 0, 0, 0, 0 })
+    #define NOT_A_GGRAPH ((ASTree)){ { NOT_A_CHUNK }, { NOT_AN_ALIST }, { NOT_AN_ALIST }, 0, 0, 0, 0 })
 
     typedef struct GrammarGraphBody {
         Chunk       str_chunk[1];
