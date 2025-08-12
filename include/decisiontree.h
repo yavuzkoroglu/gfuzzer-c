@@ -8,9 +8,9 @@
 
     typedef struct DecisionTreeNodeBody {
         uint32_t    is_fully_explored;
-        uint32_t    local_expansion_id;
-        uint32_t    sibling_id;
-        uint32_t    child_id;
+        uint32_t    n_choices;
+        uint32_t    parent_id;
+        uint32_t    first_choice_id;
     } DecisionTreeNode;
 
     void constructEmpty_dtree(DecisionTree* const dtree);

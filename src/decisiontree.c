@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <stdlib.h>
 #include "decisiontree.h"
 
 void constructEmpty_dtree(DecisionTree* const dtree) {
@@ -18,12 +19,19 @@ void generateRandomDecisionSequence_dtree(
     bool const is_cov_guided,
     bool const unique
 ) {
+    static DecisionTreeNode template_node[1]    = { 0, INVALID_UINT32, INVALID_UINT32, INVALID_UINT32 };
+    uint32_t node_id                            = 0;
+
     assert(isValid_alist(sequence));
     assert(sequence->sz_elem == sizeof(uint32_t));
     assert(isValid_dtree(dtree));
     assert(isValid_ggraph(graph));
-
-    
+    {
+        ArrayList stacks[2][1]  = { { NOT_AN_ALIST }, { NOT_AN_ALIST } };
+        ArrayList* stack_A      = stacks[0];
+        ArrayList* stack_B      = stacks[1];
+        RuleTerm* rule          = get_alist(graph->rule_list, graph->root_rule_id);
+    }
 }
 
 bool isValid_dtree(DecisionTree const* const dtree) {
