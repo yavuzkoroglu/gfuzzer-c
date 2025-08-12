@@ -10,6 +10,12 @@
 #define MAX_N               (4194304)
 #define MAX_TIMEOUT         (604800)
 
+#define DEFAULT_COV_GUIDED  (0)
+#define DEFAULT_UNIQUE      (1)
+#define DEFAULT_SEED        (131077)
+#define DEFAULT_N           (100)
+#define DEFAULT_TIMEOUT     (60)
+
 #ifdef TIME_ELAPSED
     #undef SECONDS_ELAPSED
 #endif
@@ -118,7 +124,7 @@ static void showErrorNoBNFFilenameGiven(void) {
 static void showErrorNumberMissing(void) {
     fputs(
         "\n"
-        "[ERROR] - Must specify a NUMBER file with -n or --number\n"
+        "[ERROR] - Must specify a NUMBER with -n or --number\n"
         "\n"
         "gfuzzer --help for more instructions\n"
         "\n",
@@ -174,6 +180,17 @@ static void showErrorRootStrBadFormat(char const* const root_str) {
     );
 }
 
+static void showErrorSeedMissing(void) {
+    fputs(
+        "\n"
+        "[ERROR] - Must specify a NUMBER with -s or --seed\n"
+        "\n"
+        "gfuzzer --help for more instructions\n"
+        "\n",
+        stderr
+    );
+}
+
 static void showErrorSyntax(void) {
     fputs(
         "\n"
@@ -186,7 +203,7 @@ static void showErrorSyntax(void) {
 static void showErrorTimeoutMissing(void) {
     fputs(
         "\n"
-        "[ERROR] - Must specify a TIMEOUT file with -t or --timeout\n"
+        "[ERROR] - Must specify a NUMBER with -t or --timeout\n"
         "\n"
         "gfuzzer --help for more instructions\n"
         "\n",
@@ -197,7 +214,7 @@ static void showErrorTimeoutMissing(void) {
 static void showErrorTimeoutZero(void) {
     fputs(
         "\n"
-        "[ERROR] - TIMEOUT cannot be zero\n"
+        "[ERROR] - Timeout NUMBER cannot be zero\n"
         "\n"
         "gfuzzer --help for more instructions\n"
         "\n",
@@ -209,7 +226,7 @@ static void showErrorTimeoutTooLarge(uint32_t const t) {
     fprintf(
         stderr,
         "\n"
-        "[ERROR] - TIMEOUT must NOT exceed %d (t = %"PRIu32")\n"
+        "[ERROR] - Timeout NUMBER must NOT exceed %d (t = %"PRIu32")\n"
         "\n"
         "gfuzzer --help for more instructions\n"
         "\n",
@@ -230,26 +247,27 @@ static void showUsage(char const* const path) {
         "  -c,--cov-guided              Enable coverage guidance optimization (Default: Disabled)\n"
         "  -C,--copyright               Output the copyright message and exit\n"
         "  -h,--help                    Output this help message and exit\n"
-        "  -n,--number NUMBER           The number of sentences (Default: 100)\n"
+        "  -n,--number NUMBER           The number of sentences (Default: %d)\n"
         "  -r,--root \""
                       BNF_STR_RULE_OPEN
                       "RULE"
                           BNF_STR_RULE_CLOSE
                           "\"           The root rule (Default: The first rule in the BNF-FILE)\n"
-        "  -s,--same                    Allow the same sentence twice (Default: Do NOT allow / UNIQUE = true)\n"
-        "  -t,--timeout TIMEOUT         Terminate generating sentences after some seconds (Default: 60)\n"
+        "  -s,--seed NUMBER             Change the default random seed (Default: %d)\n"
+        "  -S,--same                    Allow the same sentence twice (Default: Do NOT allow / UNIQUE = true)\n"
+        "  -t,--timeout NUMBER          Terminate generating sentences after some seconds (Default: %d)\n"
         "  -v,--verbose                 Timestamped status information (including term coverage) to stderr\n"
         "  -V,--version                 Output version number and exit\n"
         "\n"
         BNF_STR_RULE_OPEN"RULE"BNF_STR_RULE_CLOSE" FORMAT:\n"
-        "  * Every rule must begin with '"BNF_STR_RULE_OPEN"'.\n"
-        "  * Every rule must end with '"BNF_STR_RULE_CLOSE"'.\n"
-        "  * Rules cannot contain whitespace.\n"
+        "  * Every rule name must begin with '"BNF_STR_RULE_OPEN"'.\n"
+        "  * Every rule name must end with '"BNF_STR_RULE_CLOSE"'.\n"
+        "  * Rule names cannot contain whitespace.\n"
         "\n"
         "EXAMPLE USES:\n"
         "  %.*s -b bnf/numbers.bnf -n 10 -r \""BNF_STR_RULE_OPEN"number"BNF_STR_RULE_CLOSE"\" -s -t 10\n"
         "\n",
-        FILENAME_MAX, path
+        DEFAULT_N, DEFAULT_SEED, DEFAULT_TIMEOUT, FILENAME_MAX, path
     );
 }
 
@@ -276,10 +294,11 @@ int main(
     char const* root_str            = NULL;
     size_t root_len                 = 0;
     bool* const is_arg_processed    = mem_calloc((size_t)argc, sizeof(bool));
-    bool is_cov_guided              = 0;
-    bool unique                     = 1;
-    uint32_t n                      = 100;
-    uint32_t t                      = 60;
+    bool is_cov_guided              = DEFAULT_COV_GUIDED;
+    bool unique                     = DEFAULT_UNIQUE;
+    uint32_t n                      = DEFAULT_N;
+    uint32_t seed                   = DEFAULT_SEED;
+    uint32_t t                      = DEFAULT_TIMEOUT;
 
     if (argc <= 1) {
         showUsage(argv[0]);
@@ -404,19 +423,6 @@ int main(
     for (int i = argc - 1; i > 0; i--) {
         if (is_arg_processed[i]) continue;
 
-        if (LITEQ(argv[i], "-s") || LITEQ(argv[i], "--same")) {
-            unique = 0;
-            break;
-        }
-    }
-    if (unique)
-        fprintf_verbose(stderr, "UNIQUE = true");
-    else
-        fprintf_verbose(stderr, "UNIQUE = false");
-
-    for (int i = argc - 1; i > 0; i--) {
-        if (is_arg_processed[i]) continue;
-
         if (LITEQ(argv[i], "-n") || LITEQ(argv[i], "--number")) {
             if (i == argc - 1) {
                 showErrorNumberMissing();
@@ -439,6 +445,41 @@ int main(
         }
     }
     fprintf_verbose(stderr, "n = %"PRIu32" sentences", n);
+
+    for (int i = argc - 1; i > 0; i--) {
+        if (is_arg_processed[i]) continue;
+
+        if (LITEQ(argv[i], "-s") || LITEQ(argv[i], "--seed")) {
+            if (i == argc - 1) {
+                showErrorSeedMissing();
+                free(is_arg_processed);
+                return EXIT_FAILURE;
+            }
+            if (sscanf(argv[i + 1], "%"SCNu32, &seed) != 1) {
+                showErrorBadNumber(argv[i], argv[i + 1]);
+                free(is_arg_processed);
+                return EXIT_FAILURE;
+            }
+            is_arg_processed[i]     = 1;
+            is_arg_processed[i + 1] = 1;
+            break;
+        }
+    }
+    srand(seed);
+    fprintf_verbose(stderr, "seed = %"PRIu32, seed);
+
+    for (int i = argc - 1; i > 0; i--) {
+        if (is_arg_processed[i]) continue;
+
+        if (LITEQ(argv[i], "-S") || LITEQ(argv[i], "--same")) {
+            unique = 0;
+            break;
+        }
+    }
+    if (unique)
+        fprintf_verbose(stderr, "UNIQUE = true");
+    else
+        fprintf_verbose(stderr, "UNIQUE = false");
 
     for (int i = argc - 1; i > 0; i--) {
         if (is_arg_processed[i]) continue;
