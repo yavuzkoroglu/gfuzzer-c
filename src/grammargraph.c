@@ -333,8 +333,9 @@ static int load_ggraph(
         load_res = skipSpaces(line_begin, line.sz, &i);
         assert(load_res == GRAMMAR_OK);
 
-        load_res = addExpansions(graph, expansion_tbl, parent_rule, line_begin, line.sz, &i);
+        /* load_res = addExpansions(graph, expansion_tbl, parent_rule, line_begin, line.sz, &i);
         if (load_res != GRAMMAR_OK) return GRAMMAR_SYNTAX_ERROR;
+        */
     }
 
     load_res = determineRootRule(graph, rule_tbl, root_str, root_len);

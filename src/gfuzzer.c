@@ -11,6 +11,7 @@
 #define MAX_TIMEOUT         (604800)
 
 #define DEFAULT_COV_GUIDED  (0)
+#define DEFAULT_MIN_DEPTH   (0)
 #define DEFAULT_UNIQUE      (1)
 #define DEFAULT_SEED        (131077)
 #define DEFAULT_N           (100)
@@ -74,6 +75,17 @@ static void showErrorCannotOpenBNF(char const* const bnf_filename) {
         "\n",
         FILENAME_MAX,
         bnf_filename
+    );
+}
+
+static void showErrorMinDepthMissing(void) {
+    fputs(
+        "\n"
+        "[ERROR] - Must specify a NUMBER with -m or --min-depth\n"
+        "\n"
+        "gfuzzer --help for more instructions\n"
+        "\n",
+        stderr
     );
 }
 
@@ -214,6 +226,7 @@ static void showUsage(char const* const path) {
         "  -c,--cov-guided              Enable coverage guidance optimization (Default: Disabled)\n"
         "  -C,--copyright               Output the copyright message and exit\n"
         "  -h,--help                    Output this help message and exit\n"
+        "  -m,--min-depth NUMBER        The minimum depth, increase it to get longer sentences (Default: %d)\n"
         "  -n,--number NUMBER           The number of sentences (Default: %d)\n"
         "  -r,--root \""
                       BNF_STR_RULE_OPEN
@@ -234,7 +247,7 @@ static void showUsage(char const* const path) {
         "EXAMPLE USES:\n"
         "  %.*s -b bnf/numbers.bnf -c -n 10 -r \""BNF_STR_RULE_OPEN"number"BNF_STR_RULE_CLOSE"\" -t 10\n"
         "\n",
-        DEFAULT_N, DEFAULT_SEED, DEFAULT_TIMEOUT, FILENAME_MAX, path
+        DEFAULT_MIN_DEPTH, DEFAULT_N, DEFAULT_SEED, DEFAULT_TIMEOUT, FILENAME_MAX, path
     );
 }
 
@@ -267,6 +280,7 @@ int main(
     bool* const is_arg_processed    = mem_calloc((size_t)argc, sizeof(bool));
     bool is_cov_guided              = DEFAULT_COV_GUIDED;
     bool unique                     = DEFAULT_UNIQUE;
+    uint32_t min_depth              = DEFAULT_MIN_DEPTH;
     uint32_t n                      = DEFAULT_N;
     uint32_t seed                   = DEFAULT_SEED;
     uint32_t t                      = DEFAULT_TIMEOUT;
@@ -390,6 +404,27 @@ int main(
             break;
         }
     }
+
+    for (int i = argc - 1; i > 0; i--) {
+        if (is_arg_processed[i]) continue;
+
+        if (LITEQ(argv[i], "-m") || LITEQ(argv[i], "--min-depth")) {
+            if (i == argc - 1) {
+                showErrorMinDepthMissing();
+                free(is_arg_processed);
+                return EXIT_FAILURE;
+            }
+            if (sscanf(argv[i + 1], "%"SCNu32, &min_depth) != 1) {
+                showErrorBadNumber(argv[i], argv[i + 1]);
+                free(is_arg_processed);
+                return EXIT_FAILURE;
+            }
+            is_arg_processed[i]     = 1;
+            is_arg_processed[i + 1] = 1;
+            break;
+        }
+    }
+    fprintf_verbose(stderr, "MIN_DEPTH = %"PRIu32" expansions", min_depth);
 
     for (int i = argc - 1; i > 0; i--) {
         if (is_arg_processed[i]) continue;

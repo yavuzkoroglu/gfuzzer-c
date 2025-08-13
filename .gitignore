@@ -80,3 +80,4 @@ dkms.conf
 bnf/bnfgen
 bnf/*.pdf
 bnf/rainwatertank2.bnf
+log.txt
