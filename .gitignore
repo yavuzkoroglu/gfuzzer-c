@@ -76,3 +76,7 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+bnf/bnfgen
+bnf/*.pdf
+bnf/rainwatertank2.bnf
