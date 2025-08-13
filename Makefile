@@ -48,8 +48,9 @@ obj/grammargraph.o: .FORCE              \
 
 obj/gfuzzer.o: .FORCE                 	\
     obj                                 \
-    include/ast.h                       \
     include/bnf.h                       \
+    include/decisiontree.h              \
+    include/grammargraph.h              \
 	padkit/include/padkit/memalloc.h    \
 	padkit/include/padkit/verbose.h   	\
     src/gfuzzer.c                     	\

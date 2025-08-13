@@ -3,7 +3,7 @@
 #include <string.h>
 #include <time.h>
 #include "bnf.h"
-#include "grammargraph.h"
+#include "decisiontree.h"
 #include "padkit/memalloc.h"
 #include "padkit/verbose.h"
 

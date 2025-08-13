@@ -21,7 +21,8 @@
     typedef struct RuleTermBody {
         uint32_t    name_id;
         uint32_t    cov_count;
-        ArrayList   expansion_id_list[1];
+        uint32_t    first_expansion_id;
+        uint32_t    n_expansions;
     } RuleTerm;
 
     typedef struct ExpansionTermBody {
@@ -51,6 +52,8 @@
         GrammarGraph* const graph,
         ArrayList const* const decision_sequence
     );
+
+    void printDot_ggraph(GrammarGraph const* const graph);
 
     uint32_t nTerms_ggraph(GrammarGraph const* const graph);
 

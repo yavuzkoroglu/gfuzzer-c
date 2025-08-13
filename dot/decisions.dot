@@ -1,0 +1,74 @@
+/* After generating 108 */
+digraph Decisions {
+    node [fontname="PT Mono",label="",shape="circle"];
+    edge [fontname="PT Mono"];
+    root [shape="none",width=0,height=0];
+    d1 [label="??",shape="none",height=0];
+    d4 [label="??",shape="none",height=0];
+    d5 [label="??",shape="none",height=0];
+    d6 [label="??",shape="none",height=0];
+    d7 [label="??",shape="none",height=0];
+    d8 [label="??",shape="none",height=0];
+    d9 [label="??",shape="none",height=0];
+    d10 [label="??",shape="none",height=0];
+    d11 [label="??",shape="none",height=0];
+    d13 [label="??",shape="none",height=0];
+    d15 [label="??",shape="none",height=0];
+    d17 [label="??",shape="none",height=0];
+    d19 [label="??",shape="none",height=0];
+    d19 [label="??",shape="none",height=0];
+    d19 [label="??",shape="none",height=0];
+    d21 [label="??",shape="none",height=0];
+    d22 [label="??",shape="none",height=0];
+    d23 [label="??",shape="none",height=0];
+    d24 [label="??",shape="none",height=0];
+    d25 [label="??",shape="none",height=0];
+    d26 [label="??",shape="none",height=0];
+    d27 [label="??",shape="none",height=0];
+    d28 [peripheries=2];
+    d29 [label="??",shape="none",height=0];
+    root->d0;
+    d0->d1 [label="<zero>"];
+    d0->d2 [label="<nonzero><digit-seq>"];
+    d2->d3 [label="'1'"];
+    d2->d4 [label="'2'"];
+    d2->d5 [label="'3'"];
+    d2->d6 [label="'4'"];
+    d2->d7 [label="'5'"];
+    d2->d8 [label="'6'"];
+    d2->d9 [label="'7'"];
+    d2->d10 [label="'8'"];
+    d2->d11 [label="'9'"];
+    d3->d12 [label="<digit><digit-seq>"];
+    d3->d13 [label="<digit>"];
+    d12->d14 [label="<zero>"];
+    d12->d15 [label="<nonzero>"];
+    d14->d16 [label="'0'"];
+    d16->d17 [label="<digit><digit-seq>"];
+    d16->d18 [label="<digit>"];
+    d18->d19 [label="<zero>"];
+    d18->d20 [label="<nonzero>"];
+    d20->d21 [label="'1'"];
+    d20->d22 [label="'2'"];
+    d20->d23 [label="'3'"];
+    d20->d24 [label="'4'"];
+    d20->d25 [label="'5'"];
+    d20->d26 [label="'6'"];
+    d20->d27 [label="'7'"];
+    d20->d28 [label="'8'"];
+    d20->d29 [label="'9'"];
+    {rank=same d1 d2}
+    {rank=same d3 d4 d5 d6 d7 d8 d9 d10 d11}
+    {rank=same d12 d13}
+    {rank=same d14 d15}
+    {rank=same d17 d18}
+    {rank=same d19 d20}
+    {rank=same d21 d22 d23 d24 d25 d26 d27 d28 d29}
+    d1->d2 [style="invis"];
+    d3->d4->d5->d6->d7->d8->d9->d10->d11 [style="invis"];
+    d12->d13 [style="invis"];
+    d14->d15 [style="invis"];
+    d17->d18 [style="invis"];
+    d19->d20 [style="invis"];
+    d21->d22->d23->d24->d25->d26->d27->d28->d29 [style="invis"];
+}

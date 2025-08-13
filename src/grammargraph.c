@@ -350,6 +350,65 @@ uint32_t nTerms_ggraph(GrammarGraph const* const graph) {
     return graph->rule_list->len + graph->expansion_list->len;
 }
 
+void printDot_ggraph(
+    FILE* const output,
+    GrammarGraph const* const graph
+) {
+    uint32_t uid = 1;
+
+    assert(output != NULL);
+    assert(isValid_ggraph(graph));
+
+    fprintf(output, "digraph GrammarGraph {\n");
+    fprintf(output, "    node [fontname=\"PT Mono\"];\n");
+    fprintf(output, "    root [shape=\"none\",width=0,height=0,label=\"\"];\n");
+    {
+        RuleTerm const* rule = getFirst_alist(graph->rule_list);
+        REPEAT(graph->rule_list->len) {
+            Item const rule_name = get_chunk(graph->rule_names, rule->name_id);
+            fprintf(output, "    \"%.*s\";\n", (int)rule_name.sz, (char*)rule_name.p);
+            {
+                uint32_t* p_expansion_id = getFirst_alist(rule->expansion_id_list);
+                REPEAT(rule->expansion_id_list->len) {
+                    Expansion const* expansion      = get_alist(graph->expansion_list, *p_expansion_id);
+                    uint32_t const exp_first_uid    = uid;
+                    uint32_t const n_expansions     = 0;
+                    fprintf(
+                        output,
+                        "    \".*s\"->e%"PRIu32";\n",
+                        (int)rule_name.sz, (char*)rule_name.p, *p_expansion_id
+                    );
+                    fprintf(
+                        output,
+                        "    e%"PRIu32"[shape=\"record\",label=\"<s%"PRIu32">",
+                        *p_expansion_id,
+                        uid++
+                    );
+                    if (expansion->is_terminal) {
+                        Item const terminal = get_chunk(graph->terminals, expansion->id);
+                        fprintf(output, "%.*s", (int)terminal.sz, (char*)terminal.p);
+                    } else {
+                        RuleTerm const* const consequent    = get_alist(graph->rule_list, expansion->id);
+                        Item const consequent_name          = get_chunk(graph->rule_names, consequent->name_id);
+                        fprintf(
+                            output,
+                            "\\.*s\\"BNF_STR_RULE_CLOSE,
+                            (int)(consequent_name.sz + 1 - sizeof(BNF_STR_RULE_CLOSE)),
+                            (char*)consequent_name.p
+                        );
+                    }
+                    while (expansion->next_expansion_id != INVALID_UINT32) {
+                        expansion = get_alist(graph->expansion_list, )
+                    }
+                    p_expansion_id++;
+                }
+            }
+            rule++;
+        }
+    }
+    fprintf(output, "}\n");
+}
+
 static int skipSpaces(
     char const* const line_begin,
     uint32_t const line_sz,
