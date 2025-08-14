@@ -42,26 +42,23 @@ static void showErrorBadNumber(
     );
 }
 
-static void showErrorBNFFilenameMissing(void) {
-    fputs(
-        "\n"
-        "[ERROR] - BNF filename missing (-b or --bnf without a name)\n"
-        "\n"
-        "gfuzzer --help for more instructions\n"
-        "\n",
-        stderr
-    );
-}
-
-static void showErrorBNFFilenameTooLong(void) {
+static void showErrorParameterTooLong(
+    char const* const parameter_name,
+    char const* const abbreviations,
+    size_t const max_len,
+    size_t const len
+) {
     fprintf(
         stderr,
         "\n"
-        "[ERROR] - BNF filename cannot be longer than %d characters\n"
+        "[ERROR] - %.1024s after %.1024s cannot be longer than %zu (given: %zu)\n"
         "\n"
         "gfuzzer --help for more instructions\n"
         "\n",
-        FILENAME_MAX
+        parameter_name,
+        abbreviations,
+        max_len,
+        len
     );
 }
 
@@ -78,32 +75,10 @@ static void showErrorCannotOpenBNF(char const* const bnf_filename) {
     );
 }
 
-static void showErrorMinDepthMissing(void) {
-    fputs(
-        "\n"
-        "[ERROR] - Minimum depth missing (-m or --min-depth without a NUMBER)\n"
-        "\n"
-        "gfuzzer --help for more instructions\n"
-        "\n",
-        stderr
-    );
-}
-
 static void showErrorNoBNFFilenameGiven(void) {
     fputs(
         "\n"
         "[ERROR] - Must specify BNF file (-b or --bnf-file)\n"
-        "\n"
-        "gfuzzer --help for more instructions\n"
-        "\n",
-        stderr
-    );
-}
-
-static void showErrorNumberMissing(void) {
-    fputs(
-        "\n"
-        "[ERROR] - Number missing (-n or --number without a NUMBER)\n"
         "\n"
         "gfuzzer --help for more instructions\n"
         "\n",
@@ -123,27 +98,18 @@ static void showErrorNumberTooLarge(uint32_t const n) {
     );
 }
 
-static void showErrorRootStrMissing(void) {
-    fputs(
-        "\n"
-        "[ERROR] - Root rule missing (-r or --root without a \""BNF_STR_RULE_OPEN"RULE"BNF_STR_RULE_CLOSE"\")\n"
-        "\n"
-        "gfuzzer --help for more instructions\n"
-        "\n",
-        stderr
-    );
-}
-
-static void showErrorRootStrTooLong(char const* const root_str) {
+static void showErrorParameterMissing(
+    char const* const parameter_name,
+    char const* const abbreviations
+) {
     fprintf(
         stderr,
         "\n"
-        "[ERROR] - The root rule cannot have more than NOT %d characters)\n"
-        "        - The root rule: %.*s"
+        "[ERROR] - %.1024s missing after %.1024s\n"
         "\n"
         "gfuzzer --help for more instructions\n"
         "\n",
-        BNF_MAX_LEN_TERM, BNF_MAX_LEN_TERM, root_str
+        parameter_name, abbreviations
     );
 }
 
@@ -159,32 +125,10 @@ static void showErrorRootStrBadFormat(char const* const root_str) {
     );
 }
 
-static void showErrorSeedMissing(void) {
-    fputs(
-        "\n"
-        "[ERROR] - Seed missing (-s or --seed without a NUMBER)\n"
-        "\n"
-        "gfuzzer --help for more instructions\n"
-        "\n",
-        stderr
-    );
-}
-
 static void showErrorSyntax(void) {
     fputs(
         "\n"
         "[ERROR] - Bad Syntax @ BNF\n"
-        "\n",
-        stderr
-    );
-}
-
-static void showErrorTimeoutMissing(void) {
-    fputs(
-        "\n"
-        "[ERROR] - Timeout missing (-t or --timeout without a NUMBER)\n"
-        "\n"
-        "gfuzzer --help for more instructions\n"
         "\n",
         stderr
     );
@@ -264,16 +208,12 @@ static void showVersion(void) {
     #undef LITEQ
 #endif
 #define LITEQ(str, lit)     (strncmp(str, lit, sizeof(lit)) == 0)
-#ifdef LITNEQ
-    #undef LITNEQ
-#endif
-#define LITNEQ(str, lit)    (strncmp(str, lit, sizeof(lit)) != 0)
 
 #ifdef PROCESS_ARG
     #undef PROCESS_ARG
 #endif
 #define PROCESS_ARG(abbr,name)                                                      \
-    for (int i = argc - 1; i > 0; i--) {                                            \
+    for (int i = argc - 1; i > 0; i--)                                              \
         if (!is_arg_processed[i] && (LITEQ(argv[i], abbr) || LITEQ(argv[i], name)))
 
 int main(
@@ -283,6 +223,7 @@ int main(
     GrammarGraph graph[1]           = { NOT_A_GGRAPH };
     FILE* bnf_file                  = NULL;
     char const* bnf_filename        = NULL;
+    size_t bnf_filename_len         = 0;
     char* root_str                  = NULL;
     size_t root_len                 = 0;
     bool* const is_arg_processed    = mem_calloc((size_t)argc, sizeof(bool));
@@ -330,19 +271,14 @@ int main(
     }
 
     PROCESS_ARG("-b", "--bnf") {
-        if (i == argc - 1) {
-            showErrorBNFFilenameMissing();
+        if (i == argc - 1 || (bnf_filename = argv[i + 1])[0] == '-') {
+            showErrorParameterMissing("BNF-FILE", "-b or --bnf");
             free(is_arg_processed);
             return EXIT_FAILURE;
         }
-        bnf_filename = argv[i + 1];
-        if (bnf_filename[0] == '-') {
-            showErrorBNFFilenameMissing();
-            free(is_arg_processed);
-            return EXIT_FAILURE;
-        }
-        if (strlen(bnf_filename) > FILENAME_MAX) {
-            showErrorBNFFilenameTooLong();
+        bnf_filename_len = strlen(bnf_filename);
+        if (bnf_filename_len > FILENAME_MAX) {
+            showErrorParameterTooLong("BNF-FILE", "-b or --bnf", FILENAME_MAX, bnf_filename_len);
             free(is_arg_processed);
             return EXIT_FAILURE;
         }
@@ -367,16 +303,60 @@ int main(
     else
         fprintf_verbose(stderr, "COV_GUIDANCE = Disabled");
 
+    PROCESS_ARG("-m", "--min-depth") {
+        if (i == argc - 1) {
+            showErrorParameterMissing("NUMBER", "-m or --min-depth");
+            free(is_arg_processed);
+            return EXIT_FAILURE;
+        }
+        if (sscanf(argv[i + 1], "%"SCNu32, &min_depth) != 1) {
+            showErrorBadNumber(argv[i], argv[i + 1]);
+            free(is_arg_processed);
+            return EXIT_FAILURE;
+        }
+        is_arg_processed[i]     = 1;
+        is_arg_processed[i + 1] = 1;
+        break;
+    }
+    fprintf_verbose(stderr, "MIN_DEPTH = %"PRIu32" expansions", min_depth);
+
+    PROCESS_ARG("-n", "--number") {
+        if (i == argc - 1) {
+            showErrorParameterMissing("NUMBER", "-n or --number");
+            free(is_arg_processed);
+            return EXIT_FAILURE;
+        }
+        if (sscanf(argv[i + 1], "%"SCNu32, &n) != 1) {
+            showErrorBadNumber(argv[i], argv[i + 1]);
+            free(is_arg_processed);
+            return EXIT_FAILURE;
+        }
+        if (n > MAX_N) {
+            showErrorNumberTooLarge(n);
+            free(is_arg_processed);
+            return EXIT_FAILURE;
+        }
+        is_arg_processed[i]     = 1;
+        is_arg_processed[i + 1] = 1;
+        break;
+    }
+    fprintf_verbose(stderr, "n = %"PRIu32" sentences", n);
+
     PROCESS_ARG("-r", "--root") {
         root_str = argv[i + 1];
         if (root_str[0] == '-') {
-            showErrorRootStrMissing();
+            showErrorParameterMissing(BNF_STR_RULE_OPEN"RULE"BNF_STR_RULE_CLOSE, "-r or --root");
             free(is_arg_processed);
             return EXIT_FAILURE;
         }
         root_len = strlen(root_str);
         if (root_len > BNF_MAX_LEN_TERM) {
-            showErrorRootStrTooLong(root_str);
+            showErrorParameterTooLong(
+                BNF_STR_RULE_OPEN"RULE"BNF_STR_RULE_CLOSE,
+                "-r or --root",
+                BNF_MAX_LEN_TERM,
+                root_len
+            );
             free(is_arg_processed);
             return EXIT_FAILURE;
         }
@@ -390,118 +370,68 @@ int main(
         break;
     }
 
-    for (int i = argc - 1; i > 0; i--) {
-        if (is_arg_processed[i]) continue;
-
-        if (LITEQ(argv[i], "-m") || LITEQ(argv[i], "--min-depth")) {
-            if (i == argc - 1) {
-                showErrorMinDepthMissing();
-                free(is_arg_processed);
-                return EXIT_FAILURE;
-            }
-            if (sscanf(argv[i + 1], "%"SCNu32, &min_depth) != 1) {
-                showErrorBadNumber(argv[i], argv[i + 1]);
-                free(is_arg_processed);
-                return EXIT_FAILURE;
-            }
-            is_arg_processed[i]     = 1;
-            is_arg_processed[i + 1] = 1;
-            break;
+    PROCESS_ARG("-s", "--seed") {
+        if (i == argc - 1) {
+            showErrorParameterMissing("NUMBER", "-s or --seed");
+            free(is_arg_processed);
+            return EXIT_FAILURE;
         }
-    }
-    fprintf_verbose(stderr, "MIN_DEPTH = %"PRIu32" expansions", min_depth);
-
-    for (int i = argc - 1; i > 0; i--) {
-        if (is_arg_processed[i]) continue;
-
-        if (LITEQ(argv[i], "-n") || LITEQ(argv[i], "--number")) {
-            if (i == argc - 1) {
-                showErrorNumberMissing();
-                free(is_arg_processed);
-                return EXIT_FAILURE;
-            }
-            if (sscanf(argv[i + 1], "%"SCNu32, &n) != 1) {
-                showErrorBadNumber(argv[i], argv[i + 1]);
-                free(is_arg_processed);
-                return EXIT_FAILURE;
-            }
-            if (n > MAX_N) {
-                showErrorNumberTooLarge(n);
-                free(is_arg_processed);
-                return EXIT_FAILURE;
-            }
-            is_arg_processed[i]     = 1;
-            is_arg_processed[i + 1] = 1;
-            break;
+        if (sscanf(argv[i + 1], "%"SCNu32, &seed) != 1) {
+            showErrorBadNumber(argv[i], argv[i + 1]);
+            free(is_arg_processed);
+            return EXIT_FAILURE;
         }
-    }
-    fprintf_verbose(stderr, "n = %"PRIu32" sentences", n);
-
-    for (int i = argc - 1; i > 0; i--) {
-        if (is_arg_processed[i]) continue;
-
-        if (LITEQ(argv[i], "-s") || LITEQ(argv[i], "--seed")) {
-            if (i == argc - 1) {
-                showErrorSeedMissing();
-                free(is_arg_processed);
-                return EXIT_FAILURE;
-            }
-            if (sscanf(argv[i + 1], "%"SCNu32, &seed) != 1) {
-                showErrorBadNumber(argv[i], argv[i + 1]);
-                free(is_arg_processed);
-                return EXIT_FAILURE;
-            }
-            is_arg_processed[i]     = 1;
-            is_arg_processed[i + 1] = 1;
-            break;
-        }
+        is_arg_processed[i]     = 1;
+        is_arg_processed[i + 1] = 1;
+        break;
     }
     srand(seed);
     fprintf_verbose(stderr, "seed = %"PRIu32, seed);
 
-    for (int i = argc - 1; i > 0; i--) {
-        if (is_arg_processed[i]) continue;
-
-        if (LITEQ(argv[i], "-S") || LITEQ(argv[i], "--same")) {
-            unique = 0;
-            break;
-        }
+    PROCESS_ARG("-S", "--same") {
+        unique              = 0;
+        is_arg_processed[i] = 1;
+        break;
     }
     if (unique)
         fprintf_verbose(stderr, "UNIQUE = true");
     else
         fprintf_verbose(stderr, "UNIQUE = false");
 
-    for (int i = argc - 1; i > 0; i--) {
-        if (is_arg_processed[i]) continue;
-
-        if (LITEQ(argv[i], "-t") || LITEQ(argv[i], "--timeout")) {
-            if (i == argc - 1) {
-                showErrorTimeoutMissing();
-                free(is_arg_processed);
-                return EXIT_FAILURE;
-            }
-            if (sscanf(argv[i + 1], "%"PRIu32, &t) != 1) {
-                showErrorBadNumber(argv[i], argv[i + 1]);
-                free(is_arg_processed);
-                return EXIT_FAILURE;
-            }
-            if (t == 0) {
-                showErrorTimeoutZero();
-                free(is_arg_processed);
-                return EXIT_FAILURE;
-            }
-            if (t > MAX_TIMEOUT) {
-                showErrorTimeoutTooLarge(t);
-                free(is_arg_processed);
-                return EXIT_FAILURE;
-            }
-            is_arg_processed[i]     = 1;
-            is_arg_processed[i + 1] = 1;
-            break;
+    PROCESS_ARG("-t", "--timeout") {
+        if (i == argc - 1) {
+            showErrorParameterMissing("NUMBER", "-t or --timeout");
+            free(is_arg_processed);
+            return EXIT_FAILURE;
         }
+        if (sscanf(argv[i + 1], "%"PRIu32, &t) != 1) {
+            showErrorBadNumber(argv[i], argv[i + 1]);
+            free(is_arg_processed);
+            return EXIT_FAILURE;
+        }
+        if (t == 0) {
+            showErrorTimeoutZero();
+            free(is_arg_processed);
+            return EXIT_FAILURE;
+        }
+        if (t > MAX_TIMEOUT) {
+            showErrorTimeoutTooLarge(t);
+            free(is_arg_processed);
+            return EXIT_FAILURE;
+        }
+        is_arg_processed[i]     = 1;
+        is_arg_processed[i + 1] = 1;
+        break;
     }
     fprintf_verbose(stderr, "t = %"PRIu32" seconds", t);
+
+    fprintf_verbose(stderr, "IGNORED ARGS =");
+    for (int i = 1; i < argc - 1; i++) {
+        if (is_arg_processed[i]) continue;
+
+        fprintf_verbose(stderr, " %s", argv[i]);
+    }
+    fprintf_verbose(stderr, "\n");
 
     bnf_file = fopen(bnf_filename, "r");
     if (bnf_file == NULL) {
@@ -531,4 +461,3 @@ int main(
 }
 #undef PROCESS_ARG
 #undef LITEQ
-#undef LITNEQ
