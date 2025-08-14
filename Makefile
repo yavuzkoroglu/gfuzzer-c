@@ -1,7 +1,7 @@
 include padkit/compile.mk
 
 INCLUDE_DIRS=-Iinclude -Ipadkit/include
-OBJECTS=obj/decisiontree.o obj/gfuzzer.o obj/grammargraph.o
+OBJECTS=obj/bnf.o obj/decisiontree.o obj/gfuzzer.o obj/grammargraph.o
 
 default: bin/gfuzzer
 
@@ -20,6 +20,11 @@ bin/gfuzzer: .FORCE                   	\
 clean: ; rm -rf obj bin *.gcno *.gcda *.gcov html latex
 
 obj: ; mkdir obj
+
+obj/bnf.o: .FORCE                       \
+    obj                                 \
+    include/bnf.h                       \
+    ; ${COMPILE} ${INCLUDE_DIRS} src/bnf.c -c -o obj/bnf.o
 
 obj/decisiontree.o: .FORCE              \
     obj                                 \

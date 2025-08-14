@@ -81,7 +81,7 @@ static void showErrorCannotOpenBNF(char const* const bnf_filename) {
 static void showErrorMinDepthMissing(void) {
     fputs(
         "\n"
-        "[ERROR] - Must specify a NUMBER with -m or --min-depth\n"
+        "[ERROR] - Minimum depth missing (-m or --min-depth without a NUMBER)\n"
         "\n"
         "gfuzzer --help for more instructions\n"
         "\n",
@@ -92,7 +92,7 @@ static void showErrorMinDepthMissing(void) {
 static void showErrorNoBNFFilenameGiven(void) {
     fputs(
         "\n"
-        "[ERROR] - Must specify a BNF file with -b or --bnf\n"
+        "[ERROR] - Must specify BNF file (-b or --bnf-file)\n"
         "\n"
         "gfuzzer --help for more instructions\n"
         "\n",
@@ -103,7 +103,7 @@ static void showErrorNoBNFFilenameGiven(void) {
 static void showErrorNumberMissing(void) {
     fputs(
         "\n"
-        "[ERROR] - Must specify a NUMBER with -n or --number\n"
+        "[ERROR] - Number missing (-n or --number without a NUMBER)\n"
         "\n"
         "gfuzzer --help for more instructions\n"
         "\n",
@@ -126,7 +126,7 @@ static void showErrorNumberTooLarge(uint32_t const n) {
 static void showErrorRootStrMissing(void) {
     fputs(
         "\n"
-        "[ERROR] - Must specify a \"<RULE>\" file with -r or --root\n"
+        "[ERROR] - Root rule missing (-r or --root without a \""BNF_STR_RULE_OPEN"RULE"BNF_STR_RULE_CLOSE"\")\n"
         "\n"
         "gfuzzer --help for more instructions\n"
         "\n",
@@ -162,7 +162,7 @@ static void showErrorRootStrBadFormat(char const* const root_str) {
 static void showErrorSeedMissing(void) {
     fputs(
         "\n"
-        "[ERROR] - Must specify a NUMBER with -s or --seed\n"
+        "[ERROR] - Seed missing (-s or --seed without a NUMBER)\n"
         "\n"
         "gfuzzer --help for more instructions\n"
         "\n",
@@ -182,7 +182,7 @@ static void showErrorSyntax(void) {
 static void showErrorTimeoutMissing(void) {
     fputs(
         "\n"
-        "[ERROR] - Must specify a NUMBER with -t or --timeout\n"
+        "[ERROR] - Timeout missing (-t or --timeout without a NUMBER)\n"
         "\n"
         "gfuzzer --help for more instructions\n"
         "\n",
@@ -263,11 +263,19 @@ static void showVersion(void) {
 #ifdef LITEQ
     #undef LITEQ
 #endif
-#define LITEQ(str, lit) (memcmp(str, lit, sizeof(lit)) == 0)
+#define LITEQ(str, lit)     (strncmp(str, lit, sizeof(lit)) == 0)
 #ifdef LITNEQ
     #undef LITNEQ
 #endif
-#define LITNEQ(str, lit) (memcmp(str, lit, sizeof(lit)) != 0)
+#define LITNEQ(str, lit)    (strncmp(str, lit, sizeof(lit)) != 0)
+
+#ifdef PROCESS_ARG
+    #undef PROCESS_ARG
+#endif
+#define PROCESS_ARG(abbr,name)                                                      \
+    for (int i = argc - 1; i > 0; i--) {                                            \
+        if (!is_arg_processed[i] && (LITEQ(argv[i], abbr) || LITEQ(argv[i], name)))
+
 int main(
     int argc,
     char* argv[]
@@ -291,69 +299,57 @@ int main(
         return EXIT_SUCCESS;
     }
 
-    for (int i = argc - 1; i > 0; i--) {
-        if (LITEQ(argv[i], "-V") || LITEQ(argv[i], "--version")) {
-            showVersion();
+    PROCESS_ARG("-C", "--copyright") {
+        showCopyright();
+        free(is_arg_processed);
+        return EXIT_SUCCESS;
+    }
+
+    PROCESS_ARG("-h", "--help") {
+        showUsage(argv[0]);
+        free(is_arg_processed);
+        return EXIT_SUCCESS;
+    }
+
+    PROCESS_ARG("-V", "--version") {
+        showVersion();
+        free(is_arg_processed);
+        return EXIT_SUCCESS;
+    }
+
+    PROCESS_ARG("-v", "--verbose") {
+        verbose = 1;
+        fprintf_verbose(stderr, "Verbose enabled.");
+        #ifndef NDEBUG
+            fprintf_verbose(stderr, "MODE = debug");
+        #else
+            fprintf_verbose(stderr, "MODE = release");
+        #endif
+        is_arg_processed[i] = 1;
+        break;
+    }
+
+    PROCESS_ARG("-b", "--bnf") {
+        if (i == argc - 1) {
+            showErrorBNFFilenameMissing();
             free(is_arg_processed);
-            return EXIT_SUCCESS;
+            return EXIT_FAILURE;
         }
-    }
-
-    for (int i = argc - 1; i > 0; i--) {
-        if (LITEQ(argv[i], "-C") || LITEQ(argv[i], "--copyright")) {
-            showCopyright();
+        bnf_filename = argv[i + 1];
+        if (bnf_filename[0] == '-') {
+            showErrorBNFFilenameMissing();
             free(is_arg_processed);
-            return EXIT_SUCCESS;
+            return EXIT_FAILURE;
         }
-    }
-
-    for (int i = argc - 1; i > 0; i--) {
-        if (LITEQ(argv[i], "-h") || LITEQ(argv[i], "--help")) {
-            showUsage(argv[0]);
+        if (strlen(bnf_filename) > FILENAME_MAX) {
+            showErrorBNFFilenameTooLong();
             free(is_arg_processed);
-            return EXIT_SUCCESS;
+            return EXIT_FAILURE;
         }
-    }
-
-    for (int i = argc - 1; i > 0; i--) {
-        if (LITEQ(argv[i], "-v") || LITEQ(argv[i], "--verbose")) {
-            verbose = 1;
-            fprintf_verbose(stderr, "Verbose enabled.");
-            #ifndef NDEBUG
-                fprintf_verbose(stderr, "MODE = debug");
-            #else
-                fprintf_verbose(stderr, "MODE = release");
-            #endif
-            is_arg_processed[i] = 1;
-            break;
-        }
-    }
-
-    for (int i = argc - 1; i > 0; i--) {
-        if (is_arg_processed[i]) continue;
-
-        if (LITEQ(argv[i], "-b") || LITEQ(argv[i], "--bnf")) {
-            if (i == argc - 1) {
-                showErrorBNFFilenameMissing();
-                free(is_arg_processed);
-                return EXIT_FAILURE;
-            }
-            bnf_filename = argv[i + 1];
-            if (bnf_filename[0] == '-') {
-                showErrorBNFFilenameMissing();
-                free(is_arg_processed);
-                return EXIT_FAILURE;
-            }
-            if (strlen(bnf_filename) > FILENAME_MAX) {
-                showErrorBNFFilenameTooLong();
-                free(is_arg_processed);
-                return EXIT_FAILURE;
-            }
-            fprintf_verbose(stderr, "BNF File = %.*s", FILENAME_MAX, bnf_filename);
-            is_arg_processed[i]     = 1;
-            is_arg_processed[i + 1] = 1;
-            break;
-        }
+        fprintf_verbose(stderr, "BNF File = %.*s", FILENAME_MAX, bnf_filename);
+        is_arg_processed[i]     = 1;
+        is_arg_processed[i + 1] = 1;
+        break;
     }
     if (bnf_filename == NULL) {
         showErrorNoBNFFilenameGiven();
@@ -361,48 +357,37 @@ int main(
         return EXIT_FAILURE;
     }
 
-    for (int i = argc - 1; i > 0; i--) {
-        if (LITEQ(argv[i], "-c") || LITEQ(argv[i], "--cov-guided")) {
-            is_cov_guided           = 1;
-            is_arg_processed[i]     = 1;
-            is_arg_processed[i + 1] = 1;
-        }
+    PROCESS_ARG("-c", "--cov-guided") {
+        is_cov_guided       = 1;
+        is_arg_processed[i] = 1;
+        break;
     }
     if (is_cov_guided)
         fprintf_verbose(stderr, "COV_GUIDANCE = Enabled");
     else
         fprintf_verbose(stderr, "COV_GUIDANCE = Disabled");
 
-    for (int i = argc - 1; i > 0; i--) {
-        if (is_arg_processed[i]) continue;
-
-        if (LITEQ(argv[i], "-r") || LITEQ(argv[i], "--root")) {
-            root_str = argv[i + 1];
-            if (root_str[0] == '-') {
-                showErrorRootStrMissing();
-                free(is_arg_processed);
-                return EXIT_FAILURE;
-            }
-            root_len = strlen(root_str);
-            if (root_len > BNF_MAX_LEN_TERM) {
-                showErrorRootStrTooLong(root_str);
-                free(is_arg_processed);
-                return EXIT_FAILURE;
-            }
-            if (
-                root_len < sizeof(BNF_STR_RULE_OPEN) + sizeof(BNF_STR_RULE_CLOSE) - 1               ||
-                memcmp(root_str, BNF_STR_RULE_OPEN, sizeof(BNF_STR_RULE_OPEN) - 1) != 0             ||
-                LITNEQ(root_str + root_len + 1 - sizeof(BNF_STR_RULE_CLOSE), BNF_STR_RULE_CLOSE)    ||
-                strcspn(root_str, " \f\n\r\t\v") != root_len
-            ) {
-                showErrorRootStrBadFormat(root_str);
-                free(is_arg_processed);
-                return EXIT_FAILURE;
-            }
-            is_arg_processed[i]     = 1;
-            is_arg_processed[i + 1] = 1;
-            break;
+    PROCESS_ARG("-r", "--root") {
+        root_str = argv[i + 1];
+        if (root_str[0] == '-') {
+            showErrorRootStrMissing();
+            free(is_arg_processed);
+            return EXIT_FAILURE;
         }
+        root_len = strlen(root_str);
+        if (root_len > BNF_MAX_LEN_TERM) {
+            showErrorRootStrTooLong(root_str);
+            free(is_arg_processed);
+            return EXIT_FAILURE;
+        }
+        if (!isRuleNameWellFormed_bnf(root_str, root_len)) {
+            showErrorRootStrBadFormat(root_str);
+            free(is_arg_processed);
+            return EXIT_FAILURE;
+        }
+        is_arg_processed[i]     = 1;
+        is_arg_processed[i + 1] = 1;
+        break;
     }
 
     for (int i = argc - 1; i > 0; i--) {
@@ -544,5 +529,6 @@ int main(
     free(is_arg_processed);
     return EXIT_SUCCESS;
 }
+#undef PROCESS_ARG
 #undef LITEQ
 #undef LITNEQ

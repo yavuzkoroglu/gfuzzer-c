@@ -45,4 +45,6 @@
     #ifndef BNF_STR_ALTERNATIVE
         #define BNF_STR_ALTERNATIVE "|"
     #endif
+
+    bool isRuleNameWellFormed_bnf(char const* const name, size_t const len);
 #endif

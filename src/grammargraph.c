@@ -95,9 +95,11 @@ static int addRule(
         ITBL_RELATION_ONE_TO_ONE
     );
     if (ins_result == ITBL_INSERT_UNIQUE) {
-        *parent             = addZeros_alist(graph->rule_list);
-        parent[0]->name_id  = LEN_CHUNK(graph->rule_names) - 1;
-        constructEmpty_alist(parent[0]->expansion_id_list, sizeof(uint32_t), ALIST_RECOMMENDED_INITIAL_CAP);
+        *parent                 = addIndeterminate_alist(graph->rule_list);
+        parent[0]->name_id      = LEN_CHUNK(graph->rule_names) - 1;
+        parent[0]->cov_count    = 0;
+        parent[0]->first_exp_id = LEN_CHUNK(graph->exp_list);
+        parent[0]->n_alt_exps   = 1;
     } else {
         RuleTerm* dup_term  = get_alist(graph->rule_list, mapping->value);
         Item dup_name       = get_chunk(graph->rule_names, dup_term->name_id);
@@ -122,13 +124,13 @@ static int addRule(
 }
 
 bool isValid_ggraph(GrammarGraph const* const graph) {
-    if (graph == NULL)                                                                      return 0;
-    if (!isValid_chunk(graph->rule_names))                                                  return 0;
-    if (!isValid_chunk(graph->terminals))                                                   return 0;
-    if (!isValid_alist(graph->rule_list))                                                   return 0;
-    if (!isValid_alist(graph->expansion_list))                                              return 0;
-    if (graph->root_rule_id >= graph->rule_list->len)                                       return 0;
-    if (graph->n_terms_covered_once <= graph->rule_list->len + graph->expansion_list->len)  return 0;
+    if (graph == NULL)                                                                  return 0;
+    if (!isValid_chunk(graph->rule_names))                                              return 0;
+    if (!isValid_chunk(graph->terminals))                                               return 0;
+    if (!isValid_alist(graph->rule_list))                                               return 0;
+    if (!isValid_alist(graph->exp_list))                                                return 0;
+    if (graph->root_rule_id >= graph->rule_list->len)                                   return 0;
+    if (graph->n_terms_covered_once <= graph->rule_list->len + graph->exp_list->len)    return 0;
 
     return 1;
 }
@@ -155,7 +157,19 @@ int construct_ggraph(
     cutByDelimLast_chunk(lines, "\n");
     fprintf_verbose(stderr, "GRAMMAR_GRAPH: # Lines = %"PRIu32, LEN_CHUNK(lines));
 
+    constructEmpty_chunk(graph->rule_names, CHUNK_RECOMMENDED_PARAMETERS);
+    constructEmpty_chunk(graph->terminals, CHUNK_RECOMMENDED_PARAMETERS);
+    constructEmpty_alist(graph->rule_list, sizeof(RuleTerm), ALIST_RECOMMENDED_INITIAL_CAP);
+    constructEmpty_alist(graph->exp_list, sizeof(ExpansionTerm), ALIST_RECOMMENDED_INITIAL_CAP);
+
     construct_res = load_ggraph(graph, rule_tbl, terminal_tbl, lines, root_str, root_len);
+
+    if (construct_res != GRAMMAR_OK) {
+        destruct_chunk(graph->rule_names);
+        destruct_chunk(graph->terminals);
+        destruct_chunk(graph->rule_list);
+        destruct_chunk(graph->exp_list);
+    }
 
     destruct_chunk(lines);
     destruct_itbl(rule_tbl);
@@ -169,17 +183,8 @@ void destruct_ggraph(GrammarGraph* const graph) {
 
     destruct_chunk(graph->rule_names);
     destruct_chunk(graph->terminals);
-
-    {
-        RuleTerm* rule = getFirst_alist(graph->rule_list);
-        REPEAT(graph->rule_list->len) {
-            if (isValid_alist(rule->expansion_id_list)) destruct_alist(rule->expansion_id_list);
-            rule++;
-        }
-    }
-
     destruct_alist(graph->rule_list);
-    destruct_alist(graph->expansion_list);
+    destruct_alist(graph->exp_list);
 
     *graph = NOT_A_GGRAPH;
 }
@@ -229,7 +234,7 @@ int generateSentence_ggraph(
         uint32_t decision_id        = 0;
         uint32_t local_expansion_id = *(uint32_t*)get_alist(decision_sequence, decision_id++);
         uint32_t expansion_id       = *(uint32_t*)get_alist(rule->expansion_id_list, local_expansion_id);
-        ExpansionTerm* expansion    = get_alist(graph->expansion_list, expansion_id);
+        ExpansionTerm* exp          = get_alist(graph->expansion_list, expansion_id);
         uint32_t allTerminals       = 1;
 
         if (rule->cov_count == 0)       graph->n_terms_covered_once++;
@@ -240,22 +245,22 @@ int generateSentence_ggraph(
 
         allTerminals &= expansion->is_terminal;
         add_alist(stack_A, expansion);
-        while (expansion->next_expansion_id != INVALID_UINT32) {
-            expansion = get_alist(graph->expansion_list, expansion->next_expansion_id);
-            allTerminals &= expansion->is_terminal;
-            add_alist(stack_A, expansion);
+        while (exp->has_next) {
+            exp++;
+            allTerminals &= exp->is_terminal;
+            add_alist(stack_A, exp);
         }
         while (!allTerminals) {
-            expansion       = getFirst_alist(stack_A);
+            exp             = getFirst_alist(stack_A);
             allTerminals    = 1;
             REPEAT(stack_A->len) {
-                if (expansion->cov_count == 0)          graph->n_terms_covered_once++;
-                if (expansion->cov_count < SZ32_MAX)    expansion->cov_count++;
+                if (exp->cov_count == 0)        graph->n_terms_covered_once++;
+                if (exp->cov_count < SZ32_MAX)  exp->cov_count++;
 
-                if (expansion->is_terminal) {
-                    add_alist(stack_B, expansion);
+                if (exp->is_terminal) {
+                    add_alist(stack_B, exp);
                 } else {
-                    rule            = get_alist(graph->rule_list, expansion->id);
+                    rule = get_alist(graph->rule_list, exp->rt_id);
                     if (rule->cov_count == 0)           graph->n_terms_covered_once++;
                     if (rule->cov_count < SZ32_MAX)     rule->cov_count++;
 
@@ -264,9 +269,9 @@ int generateSentence_ggraph(
                         destruct_alist(stack_B);
                         return GRAMMAR_SENTENCE_ERROR;
                     }
-                    local_expansion_id  = *(uint32_t*)get_alist(decision_sequence, decision_id++);
-                    expansion_id        = *(uint32_t*)get_alist(rule->expansion_id_list, local_expansion_id);
-                    expansion           = get_alist(graph->expansion_list, expansion_id);
+                    local_exp_id    = *(uint32_t*)get_alist(decision_sequence, decision_id++);
+                    exp_id          = *(uint32_t*)get_alist(rule->expansion_id_list, local_exp_id);
+                    exp             = get_alist(graph->exp_list, exp_id);
 
                     allTerminals &= expansion->is_terminal;
                     add_alist(stack_B, expansion);

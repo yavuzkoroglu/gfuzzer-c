@@ -9,11 +9,12 @@
         0, 0                                \
     })
 
+    /* "exp" is an abbreviation for "expansion". */
     typedef struct GrammarGraphBody {
         Chunk       rule_names[1];
         Chunk       terminals[1];
         ArrayList   rule_list[1];
-        ArrayList   expansion_list[1];
+        ArrayList   exp_list[1];
         uint32_t    root_rule_id;
         uint32_t    n_terms_covered_once;
     } GrammarGraph;
@@ -21,15 +22,16 @@
     typedef struct RuleTermBody {
         uint32_t    name_id;
         uint32_t    cov_count;
-        uint32_t    first_expansion_id;
-        uint32_t    n_expansions;
+        uint32_t    first_exp_id;
+        uint32_t    n_alt_exps;
     } RuleTerm;
 
+    /* is_terminal == !is_rule */
     typedef struct ExpansionTermBody {
-        uint32_t    is_terminal;
-        uint32_t    id;
-        uint32_t    cov_count;
-        uint32_t    next_expansion_id;
+        uint32_t    rt_id:31;
+        uint32_t    is_terminal:1;
+        uint32_t    cov_count:31;
+        uint32_t    has_next:1;
     } ExpansionTerm;
 
     #define GRAMMAR_OK              (0)
