@@ -16,14 +16,14 @@
         ArrayList   rule_list[1];
         ArrayList   exp_list[1];
         uint32_t    root_rule_id;
-        uint32_t    n_terms_covered_once;
+        uint32_t    n_cov;
     } GrammarGraph;
 
     typedef struct RuleTermBody {
         uint32_t    name_id;
         uint32_t    cov_count;
-        uint32_t    first_exp_id;
-        uint32_t    n_alt_exps;
+        uint32_t    first_alt_id;
+        uint32_t    n_alt;
     } RuleTerm;
 
     /* is_terminal == !is_rule */
