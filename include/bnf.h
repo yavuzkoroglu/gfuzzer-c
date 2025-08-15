@@ -47,4 +47,6 @@
     #endif
 
     bool isRuleNameWellFormed_bnf(char const* const name, size_t const len);
+
+    bool isTerminalWellFormed_bnf(char const* const term, size_t const len);
 #endif

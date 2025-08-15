@@ -62,16 +62,16 @@ static void showErrorParameterTooLong(
     );
 }
 
-static void showErrorCannotOpenBNF(char const* const bnf_filename) {
+static void showErrorCannotOpenFile(char const* const filename) {
     fprintf(
         stderr,
         "\n"
-        "[ERROR] - Cannot open '%.*s'\n"
+        "[ERROR] - Cannot open file '%.*s'\n"
         "\n"
         "gfuzzer --help for more instructions\n"
         "\n",
         FILENAME_MAX,
-        bnf_filename
+        filename
     );
 }
 
@@ -166,9 +166,10 @@ static void showUsage(char const* const path) {
         "Usage: gfuzzer -b <bnf-file> [options]\n"
         "\n"
         "GENERAL OPTIONS:\n"
-        "  -b,--bnf BNF-FILE            (Mandatory) An input grammar in Backus-Naur Form\n"
+        "  -b,--bnf FILENAME            (Mandatory) An input grammar in Backus-Naur Form\n"
         "  -c,--cov-guided              Enable coverage guidance optimization (Default: Disabled)\n"
         "  -C,--copyright               Output the copyright message and exit\n"
+        "  -d,--dot-file FILENAME       Output the BNF in DOT format (Default: Disabled)\n"
         "  -h,--help                    Output this help message and exit\n"
         "  -m,--min-depth NUMBER        The minimum depth, increase it to get longer sentences (Default: %d)\n"
         "  -n,--number NUMBER           The number of sentences (Default: %d)\n"
@@ -176,7 +177,8 @@ static void showUsage(char const* const path) {
                       BNF_STR_RULE_OPEN
                       "RULE"
                           BNF_STR_RULE_CLOSE
-                          "\"           The root rule (Default: The first rule in the BNF-FILE)\n"
+                          "\"           The root rule (Default: The top rule in the BNF file)\n"
+        "  -p,--prefix-tree FILENAME    Output the generated prefix tree in DOT format (Default: Disabled)\n"
         "  -s,--seed NUMBER             Change the default random seed (Default: %d)\n"
         "  -S,--same                    Allow the same sentence twice (Default: Do NOT allow / UNIQUE = true)\n"
         "  -t,--timeout NUMBER          Terminate generating sentences after some seconds (Default: %d)\n"
@@ -224,6 +226,10 @@ int main(
     FILE* bnf_file                  = NULL;
     char const* bnf_filename        = NULL;
     size_t bnf_filename_len         = 0;
+    char const* dot_filename        = NULL;
+    size_t dot_filename_len         = 0;
+    char const* pre_filename        = NULL;
+    size_t pre_filename_len         = 0;
     char* root_str                  = NULL;
     size_t root_len                 = 0;
     bool* const is_arg_processed    = mem_calloc((size_t)argc, sizeof(bool));
@@ -272,13 +278,13 @@ int main(
 
     PROCESS_ARG("-b", "--bnf") {
         if (i == argc - 1 || (bnf_filename = argv[i + 1])[0] == '-') {
-            showErrorParameterMissing("BNF-FILE", "-b or --bnf");
+            showErrorParameterMissing("FILENAME", "-b or --bnf");
             free(is_arg_processed);
             return EXIT_FAILURE;
         }
         bnf_filename_len = strlen(bnf_filename);
         if (bnf_filename_len > FILENAME_MAX) {
-            showErrorParameterTooLong("BNF-FILE", "-b or --bnf", FILENAME_MAX, bnf_filename_len);
+            showErrorParameterTooLong("FILENAME", "-b or --bnf", FILENAME_MAX, bnf_filename_len);
             free(is_arg_processed);
             return EXIT_FAILURE;
         }
@@ -302,6 +308,25 @@ int main(
         fprintf_verbose(stderr, "COV_GUIDANCE = Enabled");
     else
         fprintf_verbose(stderr, "COV_GUIDANCE = Disabled");
+
+    PROCESS_ARG("-d", "--dot-file") {
+        if (i == argc - 1 || (dot_filename = argv[i + 1])[0] == '-') {
+            showErrorParameterMissing("FILENAME", "-d or --dot-file");
+            free(is_arg_processed);
+            return EXIT_FAILURE;
+        }
+        dot_filename_len = strlen(dot_filename);
+        if (dot_filename_len > FILENAME_MAX) {
+            showErrorParameterTooLong("FILENAME", "-d or --dot-file", FILENAME_MAX, dot_filename_len);
+            free(is_arg_processed);
+            return EXIT_FAILURE;
+        }
+        if (dot_filename != NULL)
+            fprintf_verbose(stderr, "DOT File = %.*s", FILENAME_MAX, dot_filename);
+        is_arg_processed[i]     = 1;
+        is_arg_processed[i + 1] = 1;
+        break;
+    }
 
     PROCESS_ARG("-m", "--min-depth") {
         if (i == argc - 1) {
@@ -341,6 +366,25 @@ int main(
         break;
     }
     fprintf_verbose(stderr, "n = %"PRIu32" sentences", n);
+
+    PROCESS_ARG("-p", "--prefix-tree") {
+        if (i == argc - 1 || (dot_filename = argv[i + 1])[0] == '-') {
+            showErrorParameterMissing("FILENAME", "-p or --prefix-tree");
+            free(is_arg_processed);
+            return EXIT_FAILURE;
+        }
+        pre_filename_len = strlen(pre_filename);
+        if (pre_filename_len > FILENAME_MAX) {
+            showErrorParameterTooLong("FILENAME", "-p or --prefix-tree", FILENAME_MAX, pre_filename_len);
+            free(is_arg_processed);
+            return EXIT_FAILURE;
+        }
+        if (pre_filename != NULL)
+            fprintf_verbose(stderr, "Prefix Tree File = %.*s", FILENAME_MAX, pre_filename);
+        is_arg_processed[i]     = 1;
+        is_arg_processed[i + 1] = 1;
+        break;
+    }
 
     PROCESS_ARG("-r", "--root") {
         root_str = argv[i + 1];
@@ -433,13 +477,13 @@ int main(
     }
     fprintf_verbose(stderr, "\n");
 
-    bnf_file = fopen(bnf_filename, "r");
-    if (bnf_file == NULL) {
-        showErrorCannotOpenBNF(bnf_filename);
+    fp = fopen(bnf_filename, "r");
+    if (fp == NULL) {
+        showErrorCannotOpenFile(bnf_filename);
         free(is_arg_processed);
         return EXIT_FAILURE;
     }
-    switch (construct_ggraph(graph, bnf_file, root_str, (uint32_t)root_len)) {
+    switch (construct_ggraph(graph, fp, root_str, (uint32_t)root_len)) {
         case GRAMMAR_OK:
             break;
         case GRAMMAR_SYNTAX_ERROR:
@@ -449,13 +493,28 @@ int main(
             free(is_arg_processed);
             return EXIT_FAILURE;
     }
-    fclose(bnf_file);
+    fclose(fp);
+
+    if (dot_filename != NULL) {
+        fp = fopen(dot_filename, "w");
+        if (fp == NULL) {
+            showErrorCannotOpenFile(dot_filename);
+            destruct_ggraph(graph);
+            free(is_arg_processed);
+            return EXIT_FAILURE;
+        }
+
+        printDot_ggraph(fp, ggraph);
+
+        fclose(fp);
+    }
 
     fprintf_verbose(stderr, "# Terms (Covered-Once) = %"PRIu32, graph->n_terms_covered_once);
     fprintf_verbose(stderr, "# Terms (Total) = %"PRIu32, nTerms_ggraph(graph));
     fprintf_verbose(stderr, "Term Coverage = %"PRIu32"%%", termCov_ggraph(graph));
     fprintf_verbose(stderr, "Finished.");
 
+    destruct_ggraph(graph);
     free(is_arg_processed);
     return EXIT_SUCCESS;
 }

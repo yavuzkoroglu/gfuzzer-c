@@ -55,7 +55,10 @@
         ArrayList const* const decision_sequence
     );
 
-    void printDot_ggraph(GrammarGraph const* const graph);
+    void printDot_ggraph(
+        FILE* const output,
+        GrammarGraph const* const graph
+    );
 
     uint32_t nTerms_ggraph(GrammarGraph const* const graph);
 

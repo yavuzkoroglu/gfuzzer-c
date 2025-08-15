@@ -378,17 +378,16 @@ void printDot_ggraph(
             Item const rule_name        = get_chunk(graph->rule_names, rule->name_id);
             ExpansionTerm const* exp    = get_alist(graph->exp_list, rule->first_alt_id);
 
-            flush_chunk(str_builder);
+            fprintf(output,
+                "    \"%.*s\"->e%"PRIu32":p1;\n"
+                "    e%"PRIu32" [shape=\"record\",label=\"",
+                (int)rule_name.sz, (char*)rule_name.p, exp_uid,
+                exp_uid
+            );
+
             for (uint32_t i = 1; i <= rule->n_alt; i += !(exp++)->hasNext) {
                 Item child_name     = NOT_AN_ITEM;
                 uint32_t port_uid   = 1;
-
-                fprintf(output,
-                    "    \"%.*s\"->e%"PRIu32":p1;\n"
-                    "    e%"PRIu32" [shape=\"record\",label=\"",
-                    (int)rule_name.sz, (char*)rule_name.p, exp_uid,
-                    exp_uid
-                );
 
                 fprintf(output, "<p%"PRIu32">", port_uid++);
                 if (exp->is_terminal) {
@@ -426,8 +425,14 @@ void printDot_ggraph(
                     }
                     exp += n_ports - 1;
 
-                    flush_chunk(str_builder);
                     exp_uid++;
+                    if (i < rule->n_alt)
+                        fprintf(output,
+                            "    \"%.*s\"->e%"PRIu32":p1;\n"
+                            "    e%"PRIu32" [shape=\"record\",label=\"",
+                            (int)rule_name.sz, (char*)rule_name.p, exp_uid,
+                            exp_uid
+                        );
                 }
             }
         }
