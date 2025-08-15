@@ -26,6 +26,15 @@
 #define IS_COMMENT_OR_EMPTY(line_begin, i, line_sz)     \
         (i == line_sz || line_begin[i] == '\0' || LITEQ(line_begin + i, BNF_STR_LINE_COMMENT))
 
+static int addExpansions(
+    GrammarGraph* const graph,
+    IndexTable* const terminal_tbl,
+    RuleTerm* const rule,
+    char const* const line_begin,
+    uint32_t const line_sz,
+    uint32_t* const i
+);
+
 static int addRule(
     RuleTerm** parent,
     GrammarGraph* const graph,
@@ -44,8 +53,8 @@ static int determineRootRule(
 
 static ExpansionTerm* getAltExp(
     GrammarGraph const* const graph,
-    RuleTerm const* const rule,
-    uint32_t const nth_alt
+    RuleTerm* const rule,
+    uint32_t const jth_alt
 );
 
 static int load_ggraph(
@@ -69,6 +78,70 @@ static int skipSpaces(
     uint32_t* const i
 );
 
+static int addExpansions(
+    GrammarGraph* const graph,
+    IndexTable* const rule_tbl,
+    IndexTable* const terminal_tbl,
+    RuleTerm* const rule,
+    char const* const line_begin,
+    uint32_t const line_sz,
+    uint32_t* const i
+) {
+    uint32_t j          = rule->n_alt;
+    ExpansionTerm* exp  = getAltExp(graph, rule, j);
+    exp->cov_count      = 0;
+    exp->has_next       = 1;
+
+    if (i == line_sz || line_begin[*i] == '\0') return GRAMMAR_SYNTAX_ERROR;
+
+    while (i < line_sz && line_begin[*i] != '\0') {
+        if (LITEQ(line_begin + *i, BNF_STR_RULE_OPEN)) {
+            RuleTerm* child;
+            addRule(&child, &(exp->rt_id), graph, rule_tbl, line_begin, line_sz, i);
+            exp->is_terminal = 0;
+
+            exp = insertIndeterminate_alist(graph->exp_list, rule->first_alt_id + ++j);
+            exp->cov_count  = 0;
+            exp->has_next   = 1;
+        } else if (LITEQ(line_begin + *i, BNF_STR_TERMINAL_OPEN)) {
+            bool ins_result;
+            IndexMapping* mapping;
+            int result          = addTerminal(graph, line_begin, line_sz, i);
+            Item const terminal = getLast_chunk(graph->terminals);
+            uint_fast64_t index = hash64_item(terminal);
+            if (result != GRAMMAR_OK) return GRAMMAR_SYNTAX_ERROR;
+
+            exp->is_terminal    = 1;
+            exp->rt_id          = LEN_CHUNK(graph->terminals) - 1
+            mapping             = insert_itbl(
+                &ins_result, terminal_tbl, index, exp->rt_id,
+                ITBL_RELATION_ONE_TO_ONE,
+                ITBL_BEHAVIOR_RESPECT
+            );
+            if (ins_result != ITBL_INSERT_UNIQUE) {
+            }
+
+            exp = insertIndeterminate_alist(graph->exp_list, rule->first_alt_id + ++j);
+            exp->cov_count  = 0;
+            exp->has_next   = 1;
+        } else if (LITEQ(line_begin + *i, BNF_STR_ALTERNATIVE)) {
+            int const result = skipSpaces(line_begin, line_sz, i);
+            assert(result == GRAMMAR_OK);
+
+            if (i == line_sz || line_begin[*i] == '\0') return GRAMMAR_SYNTAX_ERROR;
+
+            exp[-1].has_next = 0;
+            rule->n_alt++;
+        } else if (isspace((unsigned char)(line_begin + *i))) {
+            i++;
+        } else {
+            return GRAMMAR_SYNTAX_ERROR;
+        }
+    }
+
+    return GRAMMAR_OK;
+}
+
 static int addRule(
     RuleTerm** parent,
     GrammarGraph* const graph,
@@ -84,11 +157,12 @@ static int addRule(
     Item term   = add_chunk(graph->rule_names, BNF_STR_RULE_OPEN, sizeof(BNF_STR_RULE_OPEN) - 1);
     uint32_t j  = *i + term.sz;
 
-    if (LITNEQ(line_begin + *i, BNF_STR_RULE_OPEN)) return GRAMMAR_SYNTAX_ERROR;
-    if (j == line_sz || isspace(line_begin[j]))     return GRAMMAR_SYNTAX_ERROR;
+    if (LITNEQ(line_begin + *i, BNF_STR_RULE_OPEN))             return GRAMMAR_SYNTAX_ERROR;
+    if (j == line_sz || isspace((unsigned char)line_begin[j]))  return GRAMMAR_SYNTAX_ERROR;
     while (LITNEQ(line_begin + j, BNF_STR_RULE_CLOSE)) {
         term = appendLast_chunk(graph->rule_names, line_begin + j++, 1);
-        if (j == line_sz || isspace(line_begin[j]) || term.sz >= BNF_MAX_LEN_TERM) return GRAMMAR_SYNTAX_ERROR;
+        if (j == line_sz || isspace((unsigned char)line_begin[j]) || term.sz >= BNF_MAX_LEN_TERM)
+            return GRAMMAR_SYNTAX_ERROR;
     }
     *i = j + sizeof(BNF_STR_RULE_CLOSE) - 1;
 
@@ -105,8 +179,8 @@ static int addRule(
         *parent                 = addIndeterminate_alist(graph->rule_list);
         parent[0]->name_id      = LEN_CHUNK(graph->rule_names) - 1;
         parent[0]->cov_count    = 0;
-        parent[0]->first_alt_id = graph->exp_list->len;
-        parent[0]->n_alt        = 1;
+        parent[0]->first_alt_id = INVALID_UINT32;
+        parent[0]->n_alt        = 0;
     } else {
         RuleTerm* dup_term  = get_alist(graph->rule_list, mapping->value);
         Item dup_name       = get_chunk(graph->rule_names, dup_term->name_id);
@@ -120,8 +194,8 @@ static int addRule(
                 *parent                 = addIndeterminate_alist(graph->rule_list);
                 parent[0]->name_id      = LEN_CHUNK(graph->rule_names) - 1;
                 parent[0]->cov_count    = 0;
-                parent[0]->first_alt_id = graph->exp_list->len;
-                parent[0]->n_alt        = 1;
+                parent[0]->first_alt_id = INVALID_UINT32;
+                parent[0]->n_alt        = 0;
                 return GRAMMAR_OK;
             }
             mapping     = nextMapping_itbl(rule_tbl, mapping);
@@ -299,15 +373,29 @@ int generateSentence_ggraph(
 
 static ExpansionTerm* getAltExp(
     GrammarGraph const* const graph,
-    RuleTerm const* const rule,
-    uint32_t const nth_alt
+    RuleTerm* const rule,
+    uint32_t const jth_alt
 ) {
-    ExpansionTerm* exp = get_alist(graph->exp_list, rule->first_alt_id);
-    for (uint32_t i = 0; i < nth_alt; i++) {
-        while (exp->has_next) exp++;
-        exp++;
+    if (rule->n_alt == 0) {
+        assert(jth_alt == 0);
+        assert(rule->first_alt_id == INVALID_UINT32);
+        rule->n_alt         = 1;
+        rule->first_alt_id  = graph->exp_list->len;
+        return addIndeterminate_alist(graph->exp_list);
+    } else {
+        ExpansionTerm* exp = get_alist(graph->exp_list, rule->first_alt_id);
+
+        uint32_t j = 0;
+        for (uint32_t i = 0; i < jth_alt; i++, exp++, j++)
+            while (exp->has_next) exp++, j++;
+
+        if (jth_alt < rule->n_alt) {
+            return exp;
+        } else {
+            rule->n_alt++;
+            return insertIndeterminate_alist(graph->exp_list, rule->first_alt_id + j);
+        }
     }
-    return exp;
 }
 
 bool isValid_ggraph(GrammarGraph const* const graph) {
@@ -473,7 +561,7 @@ static int skipSpaces(
     uint32_t const line_sz,
     uint32_t* const i
 ) {
-    while (*i < line_sz || isspace(line_begin[*i])) (*i)++;
+    while (*i < line_sz || isspace((unsigned char)line_begin[*i])) (*i)++;
     return GRAMMAR_OK;
 }
 
