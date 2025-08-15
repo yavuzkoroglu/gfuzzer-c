@@ -216,6 +216,19 @@ static int determineRootRule(
     }
 }
 
+static ExpansionTerm const* getAltExp_ggraph(
+    GrammarGraph const* const graph,
+    RuleTerm const* const rule,
+    uint32_t const nth_alt
+) {
+    ExpansionTerm const* exp = get_alist(graph->exp_list, rule->first_alt_id);
+    for (uint32_t i = 0; i < nth_alt; i++) {
+        while (exp->hasNext) exp++;
+        exp++;
+    }
+    return exp;
+}
+
 int generateSentence_ggraph(
     Chunk* const str_builder,
     GrammarGraph* const graph,
@@ -318,14 +331,14 @@ static int load_ggraph(
         Item const line                 = get_chunk(lines, line_id);
         char const* const line_begin    = line.p;
         uint32_t i                      = 0;
-        RuleTerm* parent_rule;
+        RuleTerm* rule;
 
         load_res = skipSpaces(line_begin, line.sz, &i);
         assert(load_res == GRAMMAR_OK);
 
         if (IS_COMMENT_OR_EMPTY(line_begin, i, line.sz)) continue;
 
-        load_res = addRule(&parent_rule, graph, rule_tbl, line_begin, line.sz, &i);
+        load_res = addRule(&rule, graph, rule_tbl, line_begin, line.sz, &i);
         if (load_res != GRAMMAR_OK) return GRAMMAR_SYNTAX_ERROR;
 
         load_res = skipSpaces(line_begin, line.sz, &i);
@@ -337,9 +350,8 @@ static int load_ggraph(
         load_res = skipSpaces(line_begin, line.sz, &i);
         assert(load_res == GRAMMAR_OK);
 
-        /* load_res = addExpansions(graph, expansion_tbl, parent_rule, line_begin, line.sz, &i);
+        load_res = addExpansions(graph, terminal_tbl, rule, line_begin, line.sz, &i);
         if (load_res != GRAMMAR_OK) return GRAMMAR_SYNTAX_ERROR;
-        */
     }
 
     load_res = determineRootRule(graph, rule_tbl, root_str, root_len);
