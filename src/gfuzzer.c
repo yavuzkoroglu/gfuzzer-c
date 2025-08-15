@@ -223,7 +223,7 @@ int main(
     char* argv[]
 ) {
     GrammarGraph graph[1]           = { NOT_A_GGRAPH };
-    FILE* bnf_file                  = NULL;
+    FILE* fp                        = NULL;
     char const* bnf_filename        = NULL;
     size_t bnf_filename_len         = 0;
     char const* dot_filename        = NULL;
@@ -489,7 +489,7 @@ int main(
         case GRAMMAR_SYNTAX_ERROR:
         default:
             showErrorSyntax();
-            fclose(bnf_file);
+            fclose(fp);
             free(is_arg_processed);
             return EXIT_FAILURE;
     }
@@ -504,12 +504,11 @@ int main(
             return EXIT_FAILURE;
         }
 
-        printDot_ggraph(fp, ggraph);
-
+        printDot_ggraph(fp, graph);
         fclose(fp);
     }
 
-    fprintf_verbose(stderr, "# Terms (Covered-Once) = %"PRIu32, graph->n_terms_covered_once);
+    fprintf_verbose(stderr, "# Terms (Covered-Once) = %"PRIu32, graph->n_cov);
     fprintf_verbose(stderr, "# Terms (Total) = %"PRIu32, nTerms_ggraph(graph));
     fprintf_verbose(stderr, "Term Coverage = %"PRIu32"%%", termCov_ggraph(graph));
     fprintf_verbose(stderr, "Finished.");

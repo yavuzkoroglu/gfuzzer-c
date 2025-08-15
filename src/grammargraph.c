@@ -42,6 +42,12 @@ static int determineRootRule(
     uint32_t const root_len
 );
 
+static ExpansionTerm* getAltExp(
+    GrammarGraph const* const graph,
+    RuleTerm const* const rule,
+    uint32_t const nth_alt
+);
+
 static int load_ggraph(
     GrammarGraph* const graph,
     IndexTable* const rule_tbl,
@@ -99,19 +105,23 @@ static int addRule(
         *parent                 = addIndeterminate_alist(graph->rule_list);
         parent[0]->name_id      = LEN_CHUNK(graph->rule_names) - 1;
         parent[0]->cov_count    = 0;
-        parent[0]->first_exp_id = LEN_CHUNK(graph->exp_list);
-        parent[0]->n_alt_exps   = 1;
+        parent[0]->first_alt_id = graph->exp_list->len;
+        parent[0]->n_alt        = 1;
     } else {
         RuleTerm* dup_term  = get_alist(graph->rule_list, mapping->value);
         Item dup_name       = get_chunk(graph->rule_names, dup_term->name_id);
         while (!areEquiv_item(dup_name, term)) {
             if (mapping->next_id >= rule_tbl->mappings->len) {
-                mapping->next_id    = rule_tbl->mappings->len;
-                mapping             = addIndeterminate_alist(rule_tbl->mappings);
-                mapping->index      = term_index;
-                mapping->value      = graph->rule_list->len;
-                mapping->next_id    = INVALID_UINT32;
-                add_alist(graph->rule_list, *parent);
+                mapping->next_id        = rule_tbl->mappings->len;
+                mapping                 = addIndeterminate_alist(rule_tbl->mappings);
+                mapping->index          = term_index;
+                mapping->value          = graph->rule_list->len;
+                mapping->next_id        = INVALID_UINT32;
+                *parent                 = addIndeterminate_alist(graph->rule_list);
+                parent[0]->name_id      = LEN_CHUNK(graph->rule_names) - 1;
+                parent[0]->cov_count    = 0;
+                parent[0]->first_alt_id = graph->exp_list->len;
+                parent[0]->n_alt        = 1;
                 return GRAMMAR_OK;
             }
             mapping     = nextMapping_itbl(rule_tbl, mapping);
@@ -122,18 +132,6 @@ static int addRule(
         deleteLast_chunk(graph->rule_names);
     }
     return GRAMMAR_OK;
-}
-
-bool isValid_ggraph(GrammarGraph const* const graph) {
-    if (graph == NULL)                                                                  return 0;
-    if (!isValid_chunk(graph->rule_names))                                              return 0;
-    if (!isValid_chunk(graph->terminals))                                               return 0;
-    if (!isValid_alist(graph->rule_list))                                               return 0;
-    if (!isValid_alist(graph->exp_list))                                                return 0;
-    if (graph->root_rule_id >= graph->rule_list->len)                                   return 0;
-    if (graph->n_cov <= graph->rule_list->len + graph->exp_list->len)    return 0;
-
-    return 1;
 }
 
 int construct_ggraph(
@@ -216,19 +214,6 @@ static int determineRootRule(
     }
 }
 
-static ExpansionTerm const* getAltExp_ggraph(
-    GrammarGraph const* const graph,
-    RuleTerm const* const rule,
-    uint32_t const nth_alt
-) {
-    ExpansionTerm const* exp = get_alist(graph->exp_list, rule->first_alt_id);
-    for (uint32_t i = 0; i < nth_alt; i++) {
-        while (exp->hasNext) exp++;
-        exp++;
-    }
-    return exp;
-}
-
 int generateSentence_ggraph(
     Chunk* const str_builder,
     GrammarGraph* const graph,
@@ -247,7 +232,7 @@ int generateSentence_ggraph(
         RuleTerm* rule          = get_alist(graph->rule_list, graph->root_rule_id);
         uint32_t decision_id    = 0;
         uint32_t alt_id         = *(uint32_t*)get_alist(decision_sequence, decision_id++);
-        ExpansionTerm* exp      = getAltExp_ggraph(graph, rule, alt_id);
+        ExpansionTerm* exp      = getAltExp(graph, rule, alt_id);
         uint32_t allTerminals   = 1;
 
         if (rule->cov_count == 0)       graph->n_cov++;
@@ -283,11 +268,11 @@ int generateSentence_ggraph(
                         return GRAMMAR_SENTENCE_ERROR;
                     }
                     alt_id  = *(uint32_t*)get_alist(decision_sequence, decision_id++);
-                    exp     = getAltExp_ggraph(graph, rule, alt_id);
+                    exp     = getAltExp(graph, rule, alt_id);
 
                     allTerminals &= exp->is_terminal;
                     add_alist(stack_B, exp);
-                    while (exp->hasNext) {
+                    while (exp->has_next) {
                         exp++;
                         allTerminals &= exp->is_terminal;
                         add_alist(stack_B, exp);
@@ -310,6 +295,31 @@ int generateSentence_ggraph(
         destruct_alist(stack_A);
         return GRAMMAR_SENTENCE_OK;
     }
+}
+
+static ExpansionTerm* getAltExp(
+    GrammarGraph const* const graph,
+    RuleTerm const* const rule,
+    uint32_t const nth_alt
+) {
+    ExpansionTerm* exp = get_alist(graph->exp_list, rule->first_alt_id);
+    for (uint32_t i = 0; i < nth_alt; i++) {
+        while (exp->has_next) exp++;
+        exp++;
+    }
+    return exp;
+}
+
+bool isValid_ggraph(GrammarGraph const* const graph) {
+    if (graph == NULL)                                                  return 0;
+    if (!isValid_chunk(graph->rule_names))                              return 0;
+    if (!isValid_chunk(graph->terminals))                               return 0;
+    if (!isValid_alist(graph->rule_list))                               return 0;
+    if (!isValid_alist(graph->exp_list))                                return 0;
+    if (graph->root_rule_id >= graph->rule_list->len)                   return 0;
+    if (graph->n_cov <= graph->rule_list->len + graph->exp_list->len)   return 0;
+
+    return 1;
 }
 
 static int load_ggraph(
@@ -363,7 +373,7 @@ static int load_ggraph(
 
 uint32_t nTerms_ggraph(GrammarGraph const* const graph) {
     assert(isValid_ggraph(graph));
-    return graph->rule_list->len + graph->expansion_list->len;
+    return graph->rule_list->len + graph->exp_list->len;
 }
 
 void printDot_ggraph(
@@ -395,7 +405,7 @@ void printDot_ggraph(
                 exp_uid
             );
 
-            for (uint32_t i = 1; i <= rule->n_alt; i += !(exp++)->hasNext) {
+            for (uint32_t i = 1; i <= rule->n_alt; i += !(exp++)->has_next) {
                 Item child_name     = NOT_AN_ITEM;
                 uint32_t port_uid   = 1;
 
@@ -408,11 +418,11 @@ void printDot_ggraph(
                     child_name              = get_chunk(graph->rule_names, child->name_id);
                     fprintf(output,
                         "\\%.*s\\"BNF_STR_RULE_CLOSE,
-                        (int)child_name.sz + 1 - sizeof(BNF_STR_RULE_CLOSE), (char*)child_name.p
+                        (int)(child_name.sz + 1 - sizeof(BNF_STR_RULE_CLOSE)), (char*)child_name.p
                     );
                 }
 
-                if (exp->hasNext) {
+                if (exp->has_next) {
                     fprintf(output, BNF_STR_ALTERNATIVE);
                 } else {
                     uint32_t const n_ports = port_uid;
@@ -420,7 +430,7 @@ void printDot_ggraph(
                     fprintf(output, "\"];\n");
 
                     exp -= n_ports - 1;
-                    for (port_uid = 1; port_id <= n_ports; port_id++) {
+                    for (port_uid = 1; port_uid <= n_ports; port_uid++) {
                         if (exp->is_terminal) {
                             child_name = get_chunk(graph->terminals, exp->rt_id);
                         } else {
@@ -452,7 +462,7 @@ void printDot_ggraph(
 
     for (uint32_t i = 0; i < LEN_CHUNK(graph->terminals); i++) {
         Item const terminal = get_chunk(graph->terminals, i);
-        fprintf(output, "    \".*s\" [shape=\"none\",height=0];\n", (int)terminal.sz, (char*)terminal.p);
+        fprintf(output, "    \"%.*s\" [shape=\"none\",height=0];\n", (int)terminal.sz, (char*)terminal.p);
     }
 
     fprintf(output, "}\n");
@@ -486,7 +496,7 @@ uint32_t termCov_ggraph(GrammarGraph const* const graph) {
         uint32_t const n_cov_x_100  = 100 * graph->n_cov;
         assert(n_cov_x_100 / 100 == graph->n_cov);
 
-        return n_cov_x_100 / n_terms_total;
+        return n_cov_x_100 / n_total;
     }
 }
 
