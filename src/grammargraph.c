@@ -165,7 +165,10 @@ static int addRule(
         if (j == line_sz || isspace((unsigned char)line_begin[j]) || term.sz >= BNF_MAX_LEN_TERM)
             return GRAMMAR_SYNTAX_ERROR;
     }
-    *i = j + sizeof(BNF_STR_RULE_CLOSE) - 1;
+    term = appendLast_chunk(graph->rule_names, line_begin + j, sizeof(BNF_STR_RULE_CLOSE) - 1);
+    /* fprintf_verbose(stderr, "RULE = %.*s", term.sz, term.p); */
+    j += sizeof(BNF_STR_RULE_CLOSE) - 1;
+    *i = j;
 
     mapping = searchInsert_ctbl(&ins_result, rule_tbl, term, graph->rule_list->len, CTBL_MODE_INSERT_RESPECT);
     if (ins_result == CTBL_RESPECT_UNIQUE) {
@@ -196,10 +199,11 @@ static int addTerminal(
     if (LITNEQ(line_begin + *i, BNF_STR_TERMINAL_OPEN)) return GRAMMAR_SYNTAX_ERROR;
     if (j == line_sz || line_begin[j] == '\0')          return GRAMMAR_SYNTAX_ERROR;
     while (LITNEQ(line_begin + j, BNF_STR_TERMINAL_CLOSE)) {
-        term = appendLast_chunk(graph->rule_names, line_begin + j++, 1);
+        term = appendLast_chunk(graph->terminals, line_begin + j++, 1);
         if (j == line_sz || line_begin[j] == '\0' || term.sz >= BNF_MAX_LEN_TERM)
             return GRAMMAR_SYNTAX_ERROR;
     }
+    /* fprintf_verbose(stderr, "TERMINAL = "BNF_STR_TERMINAL_OPEN"%.*s"BNF_STR_TERMINAL_CLOSE, term.sz, term.p); */
     *i = j + sizeof(BNF_STR_TERMINAL_CLOSE) - 1;
 
     mapping = searchInsert_ctbl(NULL, terminal_tbl, term, LEN_CHUNK(graph->terminals) - 1, CTBL_MODE_INSERT_RESPECT);
@@ -235,10 +239,7 @@ int construct_ggraph(
     constructEmpty_alist(graph->rule_list, sizeof(RuleTerm), ALIST_RECOMMENDED_INITIAL_CAP);
     constructEmpty_alist(graph->exp_list, sizeof(ExpansionTerm), ALIST_RECOMMENDED_INITIAL_CAP);
 
-    fprintf_verbose(stderr, "GRAMMAR_GRAPH: Parsing...");
     construct_res = load_ggraph(graph, rule_tbl, terminal_tbl, lines, root_str, root_len);
-    if (construct_res != GRAMMAR_OK)
-        fprintf_verbose(stderr, "GRAMMAR_GRAPH: Syntax Error");
 
     if (construct_res != GRAMMAR_OK) {
         destruct_chunk(graph->rule_names);
@@ -403,7 +404,7 @@ bool isValid_ggraph(GrammarGraph const* const graph) {
     if (!isValid_alist(graph->rule_list))                               return 0;
     if (!isValid_alist(graph->exp_list))                                return 0;
     if (graph->root_rule_id >= graph->rule_list->len)                   return 0;
-    if (graph->n_cov <= graph->rule_list->len + graph->exp_list->len)   return 0;
+    if (graph->n_cov > graph->rule_list->len + graph->exp_list->len)    return 0;
 
     return 1;
 }
@@ -434,21 +435,18 @@ static int load_ggraph(
 
         if (IS_COMMENT_OR_EMPTY(line_begin, i, line.sz)) continue;
 
-        fprintf_verbose(stderr, "GRAMMAR_GRAPH: Adding new rule...");
         load_res = addRule(&rule_id, graph, rule_tbl, line_begin, line.sz, &i);
         if (load_res != GRAMMAR_OK) return GRAMMAR_SYNTAX_ERROR;
 
         load_res = skipSpaces(line_begin, line.sz, &i);
         assert(load_res == GRAMMAR_OK);
 
-        fprintf_verbose(stderr, "GRAMMAR_GRAPH: Skipping '"BNF_STR_EQUIV"'...");
         load_res = skipEquiv(line_begin, line.sz, &i);
         if (load_res != GRAMMAR_OK) return GRAMMAR_SYNTAX_ERROR;
 
         load_res = skipSpaces(line_begin, line.sz, &i);
         assert(load_res == GRAMMAR_OK);
 
-        fprintf_verbose(stderr, "GRAMMAR_GRAPH: Adding new expansion...");
         load_res = addExpansions(graph, rule_tbl, terminal_tbl, rule_id, line_begin, line.sz, &i);
         if (load_res != GRAMMAR_OK) return GRAMMAR_SYNTAX_ERROR;
     }
