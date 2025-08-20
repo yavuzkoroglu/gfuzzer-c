@@ -469,14 +469,6 @@ int main(
     }
     fprintf_verbose(stderr, "t = %"PRIu32" seconds", t);
 
-    fprintf_verbose(stderr, "IGNORED ARGS =");
-    for (int i = 1; i < argc - 1; i++) {
-        if (is_arg_processed[i]) continue;
-
-        fprintf_verbose(stderr, " %s", argv[i]);
-    }
-    fprintf_verbose(stderr, "\n");
-
     fp = fopen(bnf_filename, "r");
     if (fp == NULL) {
         showErrorCannotOpenFile(bnf_filename);

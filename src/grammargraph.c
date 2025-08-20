@@ -133,6 +133,7 @@ static int addExpansions(
 
             exp[-1].has_next = 0;
             rule->n_alt++;
+            (*i)++;
         } else if (isspace((unsigned char)*(line_begin + *i))) {
             (*i)++;
         } else {
@@ -213,10 +214,10 @@ int construct_ggraph(
     char* const root_str,
     uint32_t const root_len
 ) {
-    Chunk lines[1];
-    ChunkTable rule_tbl[1];
-    ChunkTable terminal_tbl[1];
-    int construct_res = GRAMMAR_OK;
+    Chunk lines[1]              = { NOT_A_CHUNK };
+    ChunkTable rule_tbl[1]      = { NOT_A_CTBL };
+    ChunkTable terminal_tbl[1]  = { NOT_A_CTBL };
+    int construct_res           = GRAMMAR_OK;
 
     assert(graph != NULL);
     assert(bnf_file != NULL);
@@ -234,13 +235,16 @@ int construct_ggraph(
     constructEmpty_alist(graph->rule_list, sizeof(RuleTerm), ALIST_RECOMMENDED_INITIAL_CAP);
     constructEmpty_alist(graph->exp_list, sizeof(ExpansionTerm), ALIST_RECOMMENDED_INITIAL_CAP);
 
+    fprintf_verbose(stderr, "GRAMMAR_GRAPH: Parsing...");
     construct_res = load_ggraph(graph, rule_tbl, terminal_tbl, lines, root_str, root_len);
+    if (construct_res != GRAMMAR_OK)
+        fprintf_verbose(stderr, "GRAMMAR_GRAPH: Syntax Error");
 
     if (construct_res != GRAMMAR_OK) {
         destruct_chunk(graph->rule_names);
         destruct_chunk(graph->terminals);
-        destruct_chunk(graph->rule_list);
-        destruct_chunk(graph->exp_list);
+        destruct_alist(graph->rule_list);
+        destruct_alist(graph->exp_list);
     }
 
     destruct_chunk(lines);
@@ -430,22 +434,26 @@ static int load_ggraph(
 
         if (IS_COMMENT_OR_EMPTY(line_begin, i, line.sz)) continue;
 
+        fprintf_verbose(stderr, "GRAMMAR_GRAPH: Adding new rule...");
         load_res = addRule(&rule_id, graph, rule_tbl, line_begin, line.sz, &i);
         if (load_res != GRAMMAR_OK) return GRAMMAR_SYNTAX_ERROR;
 
         load_res = skipSpaces(line_begin, line.sz, &i);
         assert(load_res == GRAMMAR_OK);
 
+        fprintf_verbose(stderr, "GRAMMAR_GRAPH: Skipping '"BNF_STR_EQUIV"'...");
         load_res = skipEquiv(line_begin, line.sz, &i);
         if (load_res != GRAMMAR_OK) return GRAMMAR_SYNTAX_ERROR;
 
         load_res = skipSpaces(line_begin, line.sz, &i);
         assert(load_res == GRAMMAR_OK);
 
+        fprintf_verbose(stderr, "GRAMMAR_GRAPH: Adding new expansion...");
         load_res = addExpansions(graph, rule_tbl, terminal_tbl, rule_id, line_begin, line.sz, &i);
         if (load_res != GRAMMAR_OK) return GRAMMAR_SYNTAX_ERROR;
     }
 
+    fprintf_verbose(stderr, "GRAMMAR_GRAPH: Determining the root rule...");
     load_res = determineRootRule(graph, rule_tbl, root_str, root_len);
     if (load_res != GRAMMAR_OK)
         return GRAMMAR_SYNTAX_ERROR;
@@ -555,7 +563,7 @@ static int skipSpaces(
     uint32_t const line_sz,
     uint32_t* const i
 ) {
-    while (*i < line_sz || isspace((unsigned char)line_begin[*i])) (*i)++;
+    while (*i < line_sz && isspace((unsigned char)line_begin[*i])) (*i)++;
     return GRAMMAR_OK;
 }
 
