@@ -232,7 +232,7 @@ int construct_ggraph(
 
     addF_chunk(lines, bnf_file, BNF_MAX_SZ_FILE, BNF_MAX_SZ_FILE);
     cutByDelimLast_chunk(lines, "\n");
-    fprintf_verbose(stderr, "GRAMMAR_GRAPH: # Lines = %"PRIu32, LEN_CHUNK(lines));
+    fprintf_verbose(stderr, "# Lines in BNF = %"PRIu32, LEN_CHUNK(lines));
 
     constructEmpty_chunk(graph->rule_names, CHUNK_RECOMMENDED_PARAMETERS);
     constructEmpty_chunk(graph->terminals, CHUNK_RECOMMENDED_PARAMETERS);
@@ -451,7 +451,6 @@ static int load_ggraph(
         if (load_res != GRAMMAR_OK) return GRAMMAR_SYNTAX_ERROR;
     }
 
-    fprintf_verbose(stderr, "GRAMMAR_GRAPH: Determining the root rule...");
     load_res = determineRootRule(graph, rule_tbl, root_str, root_len);
     if (load_res != GRAMMAR_OK)
         return GRAMMAR_SYNTAX_ERROR;
