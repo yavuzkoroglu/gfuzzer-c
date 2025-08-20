@@ -42,6 +42,7 @@ obj/grammargraph.o: .FORCE              \
     include/grammargraph.h              \
 	padkit/include/padkit/arraylist.h   \
 	padkit/include/padkit/chunk.h       \
+	padkit/include/padkit/chunktable.h  \
 	padkit/include/padkit/indextable.h  \
 	padkit/include/padkit/invalid.h     \
 	padkit/include/padkit/item.h        \
