@@ -26,11 +26,13 @@
     void destruct_dtree(DecisionTree* const tree);
 
     #define DTREE_GENERATE_OK                       (0)
-    #define DTREE_GENERATE_NO_UNIQUE_SEQ_REMAINING  (1)
+    #define DTREE_GENERATE_SHALLOW_SEQ              (1)
+    #define DTREE_GENERATE_NO_UNIQUE_SEQ_REMAINING  (2)
     int generateRandomDecisionSequence_dtree(
         ArrayList* const sequence,
         DecisionTree* const dtree,
         GrammarGraph* const graph,
+        uint32_t const min_depth,
         bool const is_cov_guided,
         bool const unique
     );

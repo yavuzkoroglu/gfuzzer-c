@@ -31,9 +31,12 @@ obj/decisiontree.o: .FORCE              \
     include/decisiontree.h              \
     include/grammargraph.h              \
 	padkit/include/padkit/arraylist.h   \
+	padkit/include/padkit/bitmatrix.h   \
 	padkit/include/padkit/chunk.h       \
 	padkit/include/padkit/indextable.h  \
+	padkit/include/padkit/invalid.h     \
 	padkit/include/padkit/item.h        \
+	padkit/include/padkit/repeat.h      \
     ; ${COMPILE} ${INCLUDE_DIRS} src/decisiontree.c -c -o obj/decisiontree.o
 
 obj/grammargraph.o: .FORCE              \
@@ -41,6 +44,7 @@ obj/grammargraph.o: .FORCE              \
     include/bnf.h                       \
     include/grammargraph.h              \
 	padkit/include/padkit/arraylist.h   \
+	padkit/include/padkit/bitmatrix.h   \
 	padkit/include/padkit/chunk.h       \
 	padkit/include/padkit/chunktable.h  \
 	padkit/include/padkit/indextable.h  \

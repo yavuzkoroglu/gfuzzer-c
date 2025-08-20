@@ -61,12 +61,6 @@ static int determineRootRule(
     uint32_t const root_len
 );
 
-static ExpansionTerm* getAltExp(
-    GrammarGraph* const graph,
-    RuleTerm* const rule,
-    uint32_t const jth_alt
-);
-
 static int load_ggraph(
     GrammarGraph* const graph,
     ChunkTable* const rule_tbl,
@@ -99,7 +93,7 @@ static int addExpansions(
 ) {
     RuleTerm* rule      = get_alist(graph->rule_list, rule_id);
     uint32_t j          = rule->n_alt;
-    ExpansionTerm* exp  = getAltExp(graph, rule, j);
+    ExpansionTerm* exp  = getAltExp_ggraph(graph, rule_id, j);
     exp->cov_count      = 0;
     exp->has_next       = 1;
 
@@ -287,6 +281,28 @@ static int determineRootRule(
     }
 }
 
+void fillCovMtx_ggraph(
+    BitMatrix* const cov_mtx,
+    GrammarGraph const* const graph,
+    uint32_t const rule_id
+) {
+    assert(isValid_bmtx(cov_mtx));
+    assert(isValid_ggraph(graph));
+    assert(rule_id < graph->rule_list->len);
+    {
+        RuleTerm const* const rule  = get_alist(graph->rule_list, rule_id);
+        ExpansionTerm const* exp    = get_alist(graph->exp_list, rule->first_alt_id);
+        for (uint32_t alt_id = 0; alt_id < rule->n_alt; exp++, alt_id++) {
+            if (exp->cov_count == 0)
+                unset_bmtx(cov_mtx, 0, alt_id);
+            else
+                set_bmtx(cov_mtx, 0, alt_id);
+
+            while (exp->has_next) exp++;
+        }
+    }
+}
+
 int generateSentence_ggraph(
     Chunk* const str_builder,
     GrammarGraph* const graph,
@@ -305,7 +321,7 @@ int generateSentence_ggraph(
         RuleTerm* rule          = get_alist(graph->rule_list, graph->root_rule_id);
         uint32_t decision_id    = 0;
         uint32_t alt_id         = *(uint32_t*)get_alist(decision_sequence, decision_id++);
-        ExpansionTerm* exp      = getAltExp(graph, rule, alt_id);
+        ExpansionTerm* exp      = getAltExp_ggraph(graph, graph->root_rule_id, alt_id);
         uint32_t allTerminals   = 1;
 
         if (rule->cov_count == 0)       graph->n_cov++;
@@ -341,7 +357,7 @@ int generateSentence_ggraph(
                         return GRAMMAR_SENTENCE_ERROR;
                     }
                     alt_id  = *(uint32_t*)get_alist(decision_sequence, decision_id++);
-                    exp     = getAltExp(graph, rule, alt_id);
+                    exp     = getAltExp_ggraph(graph, exp->rt_id, alt_id);
 
                     allTerminals &= exp->is_terminal;
                     add_alist(stack_B, exp);
@@ -370,29 +386,34 @@ int generateSentence_ggraph(
     }
 }
 
-static ExpansionTerm* getAltExp(
+ExpansionTerm* getAltExp_ggraph(
     GrammarGraph* const graph,
-    RuleTerm* const rule,
+    uint32_t const rule_id,
     uint32_t const jth_alt
 ) {
-    if (rule->n_alt == 0) {
-        assert(jth_alt == 0);
-        assert(rule->first_alt_id == INVALID_UINT32);
-        rule->n_alt         = 1;
-        rule->first_alt_id  = graph->exp_list->len;
-        return addIndeterminate_alist(graph->exp_list);
-    } else {
-        ExpansionTerm* exp = get_alist(graph->exp_list, rule->first_alt_id);
-
-        uint32_t j = 0;
-        for (uint32_t i = 0; i < jth_alt; i++, exp++, j++)
-            while (exp->has_next) { exp++; j++; }
-
-        if (jth_alt < rule->n_alt) {
-            return exp;
+    assert(isValid_ggraph(graph));
+    assert(rule_id < graph->rule_list->len);
+    {
+        RuleTerm* const rule = get_alist(graph->rule_list, rule_id);
+        if (rule->n_alt == 0) {
+            assert(jth_alt == 0);
+            assert(rule->first_alt_id == INVALID_UINT32);
+            rule->n_alt         = 1;
+            rule->first_alt_id  = graph->exp_list->len;
+            return addIndeterminate_alist(graph->exp_list);
         } else {
-            rule->n_alt++;
-            return insertIndeterminate_alist(graph->exp_list, rule->first_alt_id + j);
+            ExpansionTerm* exp = get_alist(graph->exp_list, rule->first_alt_id);
+
+            uint32_t j = 0;
+            for (uint32_t i = 0; i < jth_alt; i++, exp++, j++)
+                while (exp->has_next) { exp++; j++; }
+
+            if (jth_alt < rule->n_alt) {
+                return exp;
+            } else {
+                rule->n_alt++;
+                return insertIndeterminate_alist(graph->exp_list, rule->first_alt_id + j);
+            }
         }
     }
 }

@@ -1,5 +1,6 @@
 #ifndef GRAMMAR_GRAPH_H
     #define GRAMMAR_GRAPH_H
+    #include "padkit/bitmatrix.h"
     #include "padkit/chunk.h"
     #include "padkit/indextable.h"
 
@@ -45,6 +46,12 @@
 
     void destruct_ggraph(GrammarGraph* const graph);
 
+    void fillCovMtx_ggraph(
+        BitMatrix* const cov_mtx,
+        GrammarGraph const* const graph,
+        uint32_t const rule_id
+    );
+
     bool isValid_ggraph(GrammarGraph const* const graph);
 
     #define GRAMMAR_SENTENCE_OK     (0)
@@ -53,6 +60,12 @@
         Chunk* const str_builder,
         GrammarGraph* const graph,
         ArrayList const* const decision_sequence
+    );
+
+    ExpansionTerm* getAltExp_ggraph(
+        GrammarGraph* const graph,
+        uint32_t const rule_id,
+        uint32_t const jth_alt
     );
 
     void printDot_ggraph(
