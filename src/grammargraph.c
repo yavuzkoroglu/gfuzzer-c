@@ -45,6 +45,15 @@ static int addRule(
     uint32_t* const i
 );
 
+static int addTerminal(
+    Item* const p_terminal,
+    GrammarGraph* const graph,
+    ChunkTable* const terminal_tbl,
+    char const* const line_begin,
+    uint32_t const line_sz,
+    uint32_t* const i
+);
+
 static int determineRootRule(
     GrammarGraph* const graph,
     ChunkTable* const rule_tbl,
@@ -168,6 +177,33 @@ static int addRule(
         deleteLast_chunk(graph->rule_names);
     }
     *p_rule_id = mapping->value;
+    return GRAMMAR_OK;
+}
+
+static int addTerminal(
+    Item* const p_terminal,
+    GrammarGraph* const graph,
+    ChunkTable* const terminal_tbl,
+    char const* const line_begin,
+    uint32_t const line_sz,
+    uint32_t* const i
+) {
+    ChunkMapping* mapping;
+    Item term   = addIndeterminate_chunk(graph->terminals, 0);
+    uint32_t j  = *i + 1;
+
+    if (LITNEQ(line_begin + *i, BNF_STR_TERMINAL_OPEN)) return GRAMMAR_SYNTAX_ERROR;
+    if (j == line_sz || line_begin[j] == '\0')          return GRAMMAR_SYNTAX_ERROR;
+    while (LITNEQ(line_begin + j, BNF_STR_TERMINAL_CLOSE)) {
+        term = appendLast_chunk(graph->rule_names, line_begin + j++, 1);
+        if (j == line_sz || line_begin[j] == '\0' || term.sz >= BNF_MAX_LEN_TERM)
+            return GRAMMAR_SYNTAX_ERROR;
+    }
+    *i = j + sizeof(BNF_STR_TERMINAL_CLOSE) - 1;
+
+    mapping = searchInsert_ctbl(NULL, terminal_tbl, term, LEN_CHUNK(graph->terminals) - 1, CTBL_MODE_INSERT_RESPECT);
+    if (mapping->value != LEN_CHUNK(graph->terminals) - 1) deleteLast_chunk(graph->terminals);
+    *p_terminal = get_chunk(graph->terminals, mapping->value);
     return GRAMMAR_OK;
 }
 
