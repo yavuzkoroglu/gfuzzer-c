@@ -28,6 +28,7 @@
 
 static int addExpansions(
     GrammarGraph* const graph,
+    ChunkTable* const rule_tbl,
     ChunkTable* const terminal_tbl,
     uint32_t const rule_id,
     char const* const line_begin,
@@ -46,13 +47,13 @@ static int addRule(
 
 static int determineRootRule(
     GrammarGraph* const graph,
-    IndexTable* const rule_tbl,
+    ChunkTable* const rule_tbl,
     char* const root_str,
     uint32_t const root_len
 );
 
 static ExpansionTerm* getAltExp(
-    GrammarGraph const* const graph,
+    GrammarGraph* const graph,
     RuleTerm* const rule,
     uint32_t const jth_alt
 );
@@ -87,63 +88,30 @@ static int addExpansions(
     uint32_t const line_sz,
     uint32_t* const i
 ) {
+    RuleTerm* rule      = get_alist(graph->rule_list, rule_id);
     uint32_t j          = rule->n_alt;
     ExpansionTerm* exp  = getAltExp(graph, rule, j);
     exp->cov_count      = 0;
     exp->has_next       = 1;
 
-    if (i == line_sz || line_begin[*i] == '\0') return GRAMMAR_SYNTAX_ERROR;
+    if (*i == line_sz || line_begin[*i] == '\0') return GRAMMAR_SYNTAX_ERROR;
 
-    while (i < line_sz && line_begin[*i] != '\0') {
+    while (*i < line_sz && line_begin[*i] != '\0') {
         if (LITEQ(line_begin + *i, BNF_STR_RULE_OPEN)) {
-            RuleTerm* child;
-            int result = addRule(&child, &(exp->rt_id), graph, rule_tbl, line_begin, line_sz, i);
-            exp->is_terminal = 0;
+            uint32_t child_id;
+            int result = addRule(&child_id, graph, rule_tbl, line_begin, line_sz, i);
+            if (result != GRAMMAR_OK) return GRAMMAR_SYNTAX_ERROR;
+
+            exp->is_terminal    = 0;
+            exp->rt_id          = child_id;
 
             exp = insertIndeterminate_alist(graph->exp_list, rule->first_alt_id + ++j);
             exp->cov_count  = 0;
             exp->has_next   = 1;
         } else if (LITEQ(line_begin + *i, BNF_STR_TERMINAL_OPEN)) {
-            bool ins_result;
-            uint_fast64_t index;
-            IndexMapping* mapping;
             Item terminal;
-            int result = addTerminal(&terminal, graph, line_begin, line_sz, i);
+            int result = addTerminal(&terminal, graph, terminal_tbl, line_begin, line_sz, i);
             if (result != GRAMMAR_OK) return GRAMMAR_SYNTAX_ERROR;
-
-            index = hash64_item(terminal);
-
-            exp->is_terminal    = 1;
-            exp->rt_id          = LEN_CHUNK(graph->terminals) - 1
-            mapping             = insert_itbl(
-                &ins_result, terminal_tbl, index, exp->rt_id,
-                ITBL_RELATION_ONE_TO_ONE,
-                ITBL_BEHAVIOR_RESPECT
-            );
-            if (ins_result != ITBL_INSERT_UNIQUE) {
-                Item dup_terminal   = get_chunk(graph->terminals, mapping->value);
-                while (!areEquiv_item(dup_terminal, terminal)) {
-                    if (mapping->next_id >= terminal_tbl->mappings->len) {
-                        mapping->next_id        = terminal_tbl->mappings->len;
-                        mapping                 = addIndeterminate_alist(terminal_tbl->mappings);
-                        mapping->index          = term_index;
-                        mapping->value          = graph->rule_list->len;
-                        mapping->next_id        = INVALID_UINT32;
-                        *parent                 = addIndeterminate_alist(graph->rule_list);
-                        parent[0]->name_id      = LEN_CHUNK(graph->rule_names) - 1;
-                        parent[0]->cov_count    = 0;
-                        parent[0]->first_alt_id = INVALID_UINT32;
-                        parent[0]->n_alt        = 0;
-                        return GRAMMAR_OK;
-                    }
-                    mapping     = nextMapping_itbl(rule_tbl, mapping);
-                    dup_term    = get_alist(graph->rule_list, mapping->value);
-                    dup_name    = get_chunk(graph->rule_names, dup_term->name_id);
-                }
-                *parent = dup_term;
-                deleteLast_chunk(graph->rule_names);
-                
-            }
 
             exp = insertIndeterminate_alist(graph->exp_list, rule->first_alt_id + ++j);
             exp->cov_count  = 0;
@@ -209,10 +177,10 @@ int construct_ggraph(
     char* const root_str,
     uint32_t const root_len
 ) {
-    Chunk lines[1]              = { NOT_A_CHUNK };
-    ChunkTable rule_tbl[1]      = { NOT_AN_ITBL };
-    ChunkTable terminal_tbl[2]  = { NOT_AN_ITBL };
-    int construct_res           = GRAMMAR_OK;
+    Chunk lines[1];
+    ChunkTable rule_tbl[1];
+    ChunkTable terminal_tbl[1];
+    int construct_res = GRAMMAR_OK;
 
     assert(graph != NULL);
     assert(bnf_file != NULL);
@@ -259,7 +227,7 @@ void destruct_ggraph(GrammarGraph* const graph) {
 
 static int determineRootRule(
     GrammarGraph* const graph,
-    IndexTable* const rule_tbl,
+    ChunkTable* const rule_tbl,
     char* const root_str,
     uint32_t const root_len
 ) {
@@ -267,19 +235,14 @@ static int determineRootRule(
         graph->root_rule_id = 0;
         return GRAMMAR_OK;
     } else {
-        Item const root             = { root_str, root_len, 0 };
-        uint_fast64_t root_index    = hash64_item(root);
-        IndexMapping* mapping       = findFirstMapping_itbl(rule_tbl, root_index);
-        while (mapping != NULL) {
-            RuleTerm const* const rule  = get_alist(graph->rule_list, mapping->value);
-            Item const rule_name        = get_chunk(graph->rule_names, rule->name_id);
-            if (areEquiv_item(root, rule_name)) {
-                graph->root_rule_id = mapping->value;
-                return GRAMMAR_OK;
-            }
-            mapping = nextMapping_itbl(rule_tbl, mapping);
-        }
-        return GRAMMAR_SYNTAX_ERROR;
+        Item const root_item                = { root_str, root_len, 0 };
+        ChunkMapping const* const mapping   = searchInsert_ctbl(
+            NULL, rule_tbl, root_item, INVALID_UINT32, CTBL_MODE_SEARCH
+        );
+        if (mapping == NULL) return GRAMMAR_SYNTAX_ERROR;
+
+        graph->root_rule_id = mapping->value;
+        return GRAMMAR_OK;
     }
 }
 
@@ -367,7 +330,7 @@ int generateSentence_ggraph(
 }
 
 static ExpansionTerm* getAltExp(
-    GrammarGraph const* const graph,
+    GrammarGraph* const graph,
     RuleTerm* const rule,
     uint32_t const jth_alt
 ) {
@@ -382,7 +345,7 @@ static ExpansionTerm* getAltExp(
 
         uint32_t j = 0;
         for (uint32_t i = 0; i < jth_alt; i++, exp++, j++)
-            while (exp->has_next) exp++, j++;
+            while (exp->has_next) { exp++; j++; }
 
         if (jth_alt < rule->n_alt) {
             return exp;
@@ -443,12 +406,9 @@ static int load_ggraph(
         load_res = skipSpaces(line_begin, line.sz, &i);
         assert(load_res == GRAMMAR_OK);
 
-        load_res = addExpansions(graph, terminal_tbl, rule_id, line_begin, line.sz, &i);
+        load_res = addExpansions(graph, rule_tbl, terminal_tbl, rule_id, line_begin, line.sz, &i);
         if (load_res != GRAMMAR_OK) return GRAMMAR_SYNTAX_ERROR;
     }
-
-    graph->rule_names   = rule_tbl->chnk;
-    graph->terminals    = terminal_tbl->chnk;
 
     load_res = determineRootRule(graph, rule_tbl, root_str, root_len);
     if (load_res != GRAMMAR_OK)
