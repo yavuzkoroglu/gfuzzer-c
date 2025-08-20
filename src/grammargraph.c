@@ -120,12 +120,12 @@ static int addExpansions(
             int const result = skipSpaces(line_begin, line_sz, i);
             assert(result == GRAMMAR_OK);
 
-            if (i == line_sz || line_begin[*i] == '\0') return GRAMMAR_SYNTAX_ERROR;
+            if (*i == line_sz || line_begin[*i] == '\0') return GRAMMAR_SYNTAX_ERROR;
 
             exp[-1].has_next = 0;
             rule->n_alt++;
-        } else if (isspace((unsigned char)(line_begin + *i))) {
-            i++;
+        } else if (isspace((unsigned char)*(line_begin + *i))) {
+            (*i)++;
         } else {
             return GRAMMAR_SYNTAX_ERROR;
         }
