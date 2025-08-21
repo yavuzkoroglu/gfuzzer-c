@@ -16,7 +16,12 @@
         uint32_t    first_child_id;
     } DecisionTreeNode;
 
-    DecisionTreeNode* addUnexploredNode_dtree(
+    uint32_t addFullyExploredLeaf_dtree(
+        DecisionTree* const dtree,
+        uint32_t const parent_id
+    );
+
+    uint32_t addUnexploredNode_dtree(
         DecisionTree* const dtree,
         uint32_t const parent_id
     );
@@ -29,13 +34,29 @@
     #define DTREE_GENERATE_SHALLOW_SEQ              (1)
     #define DTREE_GENERATE_NO_UNIQUE_SEQ_REMAINING  (2)
     int generateRandomDecisionSequence_dtree(
-        ArrayList* const sequence,
+        ArrayList* const sequ,
         DecisionTree* const dtree,
-        GrammarGraph* const graph,
+        GrammarGraph const* const graph,
         uint32_t const min_depth,
-        bool const is_cov_guided,
+        bool const cov_guided,
         bool const unique
     );
 
+    bool isAllChildrenFullyExplored_dtree(
+        DecisionTree* const dtree,
+        uint32_t const parent_id
+    );
+
     bool isValid_dtree(DecisionTree const* const dtree);
+
+    uint32_t partiallyExploreNode_dtree(
+        ArrayList* const seq, uint32_t* const p_node_id,
+        DecisionTree* const dtree, GrammarGraph const* const graph, uint32_t const rule_id,
+        bool const cov_guided, bool const unique
+    );
+
+    void propagateUpState_dtree(
+        DecisionTree* const dtree,
+        uint32_t const node_id
+    );
 #endif
