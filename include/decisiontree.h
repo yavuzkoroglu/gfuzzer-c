@@ -16,34 +16,36 @@
         uint32_t    first_child_id;
     } DecisionTreeNode;
 
-    uint32_t addFullyExploredLeaf_dtree(
+    void addUnexploredNodes_dtree(
         DecisionTree* const dtree,
-        uint32_t const parent_id
-    );
-
-    uint32_t addUnexploredNode_dtree(
-        DecisionTree* const dtree,
-        uint32_t const parent_id
+        uint32_t const parent_id,
+        uint32_t const n
     );
 
     void constructEmpty_dtree(DecisionTree* const dtree);
 
     void destruct_dtree(DecisionTree* const tree);
 
+    void finalizeSeq_dtree(
+        ArrayList* const seq,
+        DecisionTree* const dtree,
+        uint32_t const node_id
+    );
+
     #define DTREE_GENERATE_OK                       (0)
     #define DTREE_GENERATE_SHALLOW_SEQ              (1)
     #define DTREE_GENERATE_NO_UNIQUE_SEQ_REMAINING  (2)
     int generateRandomDecisionSequence_dtree(
-        ArrayList* const sequ,
+        ArrayList* const seq,
         DecisionTree* const dtree,
-        GrammarGraph const* const graph,
+        GrammarGraph* const graph,
         uint32_t const min_depth,
         bool const cov_guided,
         bool const unique
     );
 
     bool isAllChildrenFullyExplored_dtree(
-        DecisionTree* const dtree,
+        DecisionTree const* const dtree,
         uint32_t const parent_id
     );
 
@@ -58,5 +60,11 @@
     void propagateUpState_dtree(
         DecisionTree* const dtree,
         uint32_t const node_id
+    );
+
+    void setLeaf_dtree(
+        DecisionTree* const dtree,
+        uint32_t const parent_id,
+        uint32_t const leaf_id
     );
 #endif

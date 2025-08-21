@@ -303,87 +303,56 @@ void fillCovMtx_ggraph(
     }
 }
 
-int generateSentence_ggraph(
+void generateSentence_ggraph(
     Chunk* const str_builder,
     GrammarGraph* const graph,
-    ArrayList const* const decision_sequence
+    ArrayList const* const seq
 ) {
+    ArrayList stack[1]          = { NOT_AN_ALIST };
+    Item terminal               = NOT_AN_ITEM;
+    RuleTerm* rule              = NULL;
+    uint32_t const* p_decision  = NULL;
+    ExpansionTerm* exp          = NULL;
+    uint32_t n_exps             = 0;
+
     assert(isValid_chunk(str_builder));
     assert(isValid_ggraph(graph));
-    assert(isValid_alist(decision_sequence));
+    assert(isValid_alist(seq));
+    assert(seq->len > 0);
 
-    if (decision_sequence->len == 0) {
-        return GRAMMAR_SENTENCE_ERROR;
-    } else {
-        ArrayList stacks[2][1]  = { { NOT_AN_ALIST }, { NOT_AN_ALIST } };
-        ArrayList* stack_A      = stacks[0];
-        ArrayList* stack_B      = stacks[1];
-        RuleTerm* rule          = get_alist(graph->rule_list, graph->root_rule_id);
-        uint32_t decision_id    = 0;
-        uint32_t alt_id         = *(uint32_t*)get_alist(decision_sequence, decision_id++);
-        ExpansionTerm* exp      = getAltExp_ggraph(graph, graph->root_rule_id, alt_id);
-        uint32_t allTerminals   = 1;
+    p_decision  = getFirst_alist(seq);
+    rule        = get_alist(graph->rule_list, graph->root_rule_id);
+    if (rule->cov_count == 0)       graph->n_cov++;
+    if (rule->cov_count < SZ32_MAX) rule->cov_count++;
 
-        if (rule->cov_count == 0)       graph->n_cov++;
-        if (rule->cov_count < SZ32_MAX) rule->cov_count++;
+    constructEmpty_alist(stack, sizeof(ExpansionTerm), ALIST_RECOMMENDED_INITIAL_CAP);
+    addIndeterminate_chunk(str_builder, 0);
 
-        constructEmpty_alist(stack_A, sizeof(ExpansionTerm), ALIST_RECOMMENDED_INITIAL_CAP);
-        constructEmpty_alist(stack_B, sizeof(ExpansionTerm), ALIST_RECOMMENDED_INITIAL_CAP);
+    exp     = getAltExp_ggraph(graph, graph->root_rule_id, *(p_decision++));
+    n_exps  = 1;
+    while ((exp++)->has_next) n_exps++;
+    REPEAT(n_exps) push_alist(stack, --exp);
 
-        allTerminals &= exp->is_terminal;
-        add_alist(stack_A, exp);
-        while (exp->has_next) {
-            exp++;
-            allTerminals &= exp->is_terminal;
-            add_alist(stack_A, exp);
-        }
-        while (!allTerminals) {
-            exp             = getFirst_alist(stack_A);
-            allTerminals    = 1;
-            REPEAT(stack_A->len) {
-                if (exp->cov_count == 0)        graph->n_cov++;
-                if (exp->cov_count < SZ32_MAX)  exp->cov_count++;
+    do {
+        exp = pop_alist(stack);
 
-                if (exp->is_terminal) {
-                    add_alist(stack_B, exp);
-                } else {
-                    rule = get_alist(graph->rule_list, exp->rt_id);
-                    if (rule->cov_count == 0)           graph->n_cov++;
-                    if (rule->cov_count < SZ32_MAX)     rule->cov_count++;
+        if (exp->cov_count == 0)        graph->n_cov++;
+        if (exp->cov_count < SZ32_MAX)  exp->cov_count++;
 
-                    if (decision_id >= decision_sequence->len) {
-                        destruct_alist(stack_A);
-                        destruct_alist(stack_B);
-                        return GRAMMAR_SENTENCE_ERROR;
-                    }
-                    alt_id  = *(uint32_t*)get_alist(decision_sequence, decision_id++);
-                    exp     = getAltExp_ggraph(graph, exp->rt_id, alt_id);
-
-                    allTerminals &= exp->is_terminal;
-                    add_alist(stack_B, exp);
-                    while (exp->has_next) {
-                        exp++;
-                        allTerminals &= exp->is_terminal;
-                        add_alist(stack_B, exp);
-                    }
-                }
-                exp++;
-            }
-            flush_alist(stack_A);
-            swap(stack_A, stack_B, sizeof(ArrayList));
-        }
-        destruct_alist(stack_B);
-
-        addIndeterminate_chunk(str_builder, 0);
-        exp = getFirst_alist(stack_A);
-        REPEAT(stack_A->len) {
-            Item const terminal = get_chunk(graph->terminals, exp->rt_id);
+        if (exp->is_terminal) {
+            terminal = get_chunk(graph->terminals, exp->rt_id);
             appendLast_chunk(str_builder, terminal.p, terminal.sz);
-            exp++;
+        } else {
+            rule = get_alist(graph->rule_list, exp->rt_id);
+            if (rule->cov_count == 0)           graph->n_cov++;
+            if (rule->cov_count < SZ32_MAX)     rule->cov_count++;
+
+            exp = getAltExp_ggraph(graph, exp->rt_id, *(p_decision++));
+            n_exps  = 1;
+            while ((exp++)->has_next) n_exps++;
+            REPEAT(n_exps) push_alist(stack, --exp);
         }
-        destruct_alist(stack_A);
-        return GRAMMAR_SENTENCE_OK;
-    }
+    } while (stack->len > 0);
 }
 
 ExpansionTerm* getAltExp_ggraph(

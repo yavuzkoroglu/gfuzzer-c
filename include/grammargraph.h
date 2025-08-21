@@ -54,9 +54,7 @@
 
     bool isValid_ggraph(GrammarGraph const* const graph);
 
-    #define GRAMMAR_SENTENCE_OK     (0)
-    #define GRAMMAR_SENTENCE_ERROR  (1)
-    int generateSentence_ggraph(
+    void generateSentence_ggraph(
         Chunk* const str_builder,
         GrammarGraph* const graph,
         ArrayList const* const decision_sequence
