@@ -497,7 +497,7 @@ void printDot_ggraph(
 
         for (uint32_t alt_id = 0; alt_id < rule->alt_list->len; alt_id++) {
             ExpansionTerm const* exp    = get_alist(graph->exp_list, *(p_exp_id++));
-            uint32_t port_id            = 1;
+            uint32_t port_id            = 0;
 
             fprintf(
                 output,
