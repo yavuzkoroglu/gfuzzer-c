@@ -7,6 +7,7 @@
 #include "padkit/memalloc.h"
 #include "padkit/verbose.h"
 
+#define MAX_DEPTH           (4194304)
 #define MAX_N               (4194304)
 #define MAX_TIMEOUT         (604800)
 
@@ -14,8 +15,54 @@
 #define DEFAULT_MIN_DEPTH   (0)
 #define DEFAULT_UNIQUE      (1)
 #define DEFAULT_SEED        (131077)
-#define DEFAULT_N           (100)
+#define DEFAULT_N           (0)
 #define DEFAULT_TIMEOUT     (60)
+
+static void generateAndPrintSentencesWithinTimeout(
+    GrammarGraph* const graph,
+    uint32_t n, uint32_t const t, uint32_t const min_depth,
+    bool cov_guided, bool unique,
+    FILE* const fp
+) {
+    Item sentence           = NOT_AN_ITEM;
+    Chunk str_builder[1]    = { NOT_A_CHUNK };
+    ArrayList seq[1]        = { NOT_AN_ALIST };
+    DecisionTree dtree[1]   = { NOT_A_DTREE };
+    time_t ts;
+
+    assert(isValid_ggraph(graph));
+    assert(n <= MAX_N);
+    assert(t <= MAX_TIMEOUT);
+    assert(min_depth <= MAX_DEPTH);
+    (void)fp;
+
+    constructEmpty_chunk(str_builder, CHUNK_RECOMMENDED_PARAMETERS);
+    constructEmpty_alist(seq, sizeof(uint32_t), ALIST_RECOMMENDED_INITIAL_CAP);
+    constructEmpty_dtree(dtree);
+
+    time(&ts);
+    while (n > 0 && difftime(time(NULL), ts) < t) {
+        switch (generateRandomDecisionSequence_dtree(seq, dtree, graph, min_depth, cov_guided, unique)) {
+            case DTREE_GENERATE_NO_UNIQUE_SEQ_REMAINING:
+                fprintf_verbose(stderr, "Exhausted all unique sentences!");
+                break;
+            case DTREE_GENERATE_SHALLOW_SEQ:
+                break;
+            case DTREE_GENERATE_OK:
+            default:
+                generateSentence_ggraph(str_builder, graph, seq);
+                sentence = getLast_chunk(str_builder);
+                printf("%.*s\n", (int)sentence.sz, (char*)sentence.p);
+                flush_chunk(str_builder);
+        }
+        flush_alist(seq);
+    }
+
+    destruct_dtree(dtree);
+    destruct_alist(seq);
+    destruct_chunk(str_builder);
+}
+
 
 static void showCopyright(void) {
     fputs(
@@ -233,7 +280,7 @@ int main(
     char* root_str                  = NULL;
     size_t root_len                 = 0;
     bool* const is_arg_processed    = mem_calloc((size_t)argc, sizeof(bool));
-    bool is_cov_guided              = DEFAULT_COV_GUIDED;
+    bool cov_guided                 = DEFAULT_COV_GUIDED;
     bool unique                     = DEFAULT_UNIQUE;
     uint32_t min_depth              = DEFAULT_MIN_DEPTH;
     uint32_t n                      = DEFAULT_N;
@@ -300,11 +347,11 @@ int main(
     }
 
     PROCESS_ARG("-c", "--cov-guided") {
-        is_cov_guided       = 1;
+        cov_guided       = 1;
         is_arg_processed[i] = 1;
         break;
     }
-    if (is_cov_guided)
+    if (cov_guided)
         fprintf_verbose(stderr, "COV_GUIDANCE = Enabled");
     else
         fprintf_verbose(stderr, "COV_GUIDANCE = Disabled");
@@ -486,6 +533,22 @@ int main(
             return EXIT_FAILURE;
     }
     fclose(fp);
+    fp = NULL;
+
+    if (pre_filename != NULL) {
+        fp = fopen(pre_filename, "w");
+        if (fp == NULL) {
+            showErrorCannotOpenFile(pre_filename);
+            destruct_ggraph(graph);
+            free(is_arg_processed);
+            return EXIT_FAILURE;
+        }
+    }
+    generateAndPrintSentencesWithinTimeout(graph, n, t, min_depth, cov_guided, unique, fp);
+    if (fp != NULL) {
+        fclose(fp);
+        fp = NULL;
+    }
 
     if (dot_filename != NULL) {
         fp = fopen(dot_filename, "w");
@@ -498,6 +561,7 @@ int main(
 
         printDot_ggraph(fp, graph);
         fclose(fp);
+        fp = NULL;
     }
 
     fprintf_verbose(stderr, "# Terms (Covered-Once) = %"PRIu32, graph->n_cov);

@@ -72,9 +72,12 @@ int generateRandomDecisionSequence_dtree(
     uint32_t n_exps             = 0;
     uint32_t rule_id            = INVALID_UINT32;
     uint32_t decision           = INVALID_UINT32;
+    uint32_t exp_id             = INVALID_UINT32;
+    RuleTerm const* rule        = NULL;
     ExpansionTerm const* exp    = NULL;
 
     assert(isValid_alist(seq));
+    assert(seq->len == 0);
     assert(seq->sz_elem == sizeof(uint32_t));
     assert(isValid_dtree(dtree));
     assert(isValid_ggraph(graph));
@@ -94,7 +97,9 @@ int generateRandomDecisionSequence_dtree(
             dtree, graph, rule_id,
             cov_guided, unique
         );
-        exp         = getAltExp_ggraph(graph, rule_id, decision);
+        rule        = get_alist(graph->rule_list, rule_id);
+        exp_id      = *(uint32_t*)get_alist(rule->alt_list, decision);
+        exp         = get_alist(graph->exp_list, exp_id);
         n_exps      = 1;
         while (exp->has_next) { exp++; n_exps++; }
         REPEAT(n_exps) {
@@ -171,7 +176,7 @@ uint32_t partiallyExploreNode_dtree(
     assert(node->state != DTREE_NODE_STATE_FULLY_EXPLORED);
     if (node->state == DTREE_NODE_STATE_UNEXPLORED) {
         node->state             = DTREE_NODE_STATE_PARTIALLY_EXPLORED;
-        node->n_choices         = rule->n_alt;
+        node->n_choices         = rule->alt_list->len;
         node->first_child_id    = dtree->node_list->len;
         assert(node->n_choices > 0);
         addUnexploredNodes_dtree(dtree, *p_node_id, node->n_choices);

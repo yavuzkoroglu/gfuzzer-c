@@ -1,0 +1,9 @@
+digraph GrammarGraph {
+    edge [fontname="PT Mono"];
+    node [fontname="PT Mono"];
+    root [shape="none",width=0,height=0,label=""];
+
+    r0 [label="<one-sentence>"];
+
+    t0 [label="'This is a sentence'",shape="none",height=0];
+}

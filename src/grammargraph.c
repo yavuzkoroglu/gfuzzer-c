@@ -36,8 +36,7 @@ static int addExpansions(
     uint32_t* const i
 );
 
-static int addRule(
-    uint32_t* const p_rule_id,
+static uint32_t addRule(
     GrammarGraph* const graph,
     ChunkTable* const rule_tbl,
     char const* const line_begin,
@@ -45,8 +44,7 @@ static int addRule(
     uint32_t* const i
 );
 
-static int addTerminal(
-    Item* const p_terminal,
+static uint32_t addTerminal(
     GrammarGraph* const graph,
     ChunkTable* const terminal_tbl,
     char const* const line_begin,
@@ -92,41 +90,40 @@ static int addExpansions(
     uint32_t* const i
 ) {
     RuleTerm* rule      = get_alist(graph->rule_list, rule_id);
-    uint32_t j          = rule->n_alt;
-    ExpansionTerm* exp  = getAltExp_ggraph(graph, rule_id, j);
-    exp->cov_count      = 0;
-    exp->has_next       = 1;
+    ExpansionTerm* exp  = NULL;
+
+    add_alist(rule->alt_list, &(graph->exp_list->len));
 
     if (*i == line_sz || line_begin[*i] == '\0') return GRAMMAR_SYNTAX_ERROR;
 
     while (*i < line_sz && line_begin[*i] != '\0') {
         if (LITEQ(line_begin + *i, BNF_STR_RULE_OPEN)) {
-            uint32_t child_id;
-            int result = addRule(&child_id, graph, rule_tbl, line_begin, line_sz, i);
-            if (result != GRAMMAR_OK) return GRAMMAR_SYNTAX_ERROR;
+            uint32_t const child_id = addRule(graph, rule_tbl, line_begin, line_sz, i);
+            if (child_id == INVALID_UINT32) return GRAMMAR_SYNTAX_ERROR;
 
+            exp                 = addIndeterminate_alist(graph->exp_list);
             exp->is_terminal    = 0;
             exp->rt_id          = child_id;
-
-            exp = insertIndeterminate_alist(graph->exp_list, rule->first_alt_id + ++j);
-            exp->cov_count  = 0;
-            exp->has_next   = 1;
+            exp->cov_count      = 0;
+            exp->has_next       = 1;
         } else if (LITEQ(line_begin + *i, BNF_STR_TERMINAL_OPEN)) {
-            Item terminal;
-            int result = addTerminal(&terminal, graph, terminal_tbl, line_begin, line_sz, i);
-            if (result != GRAMMAR_OK) return GRAMMAR_SYNTAX_ERROR;
+            uint32_t const terminal_id = addTerminal(graph, terminal_tbl, line_begin, line_sz, i);
+            if (terminal_id == INVALID_UINT32) return GRAMMAR_SYNTAX_ERROR;
 
-            exp = insertIndeterminate_alist(graph->exp_list, rule->first_alt_id + ++j);
-            exp->cov_count  = 0;
-            exp->has_next   = 1;
+            exp                 = addIndeterminate_alist(graph->exp_list);
+            exp->is_terminal    = 1;
+            exp->rt_id          = terminal_id;
+            exp->cov_count      = 0;
+            exp->has_next       = 1;
         } else if (LITEQ(line_begin + *i, BNF_STR_ALTERNATIVE)) {
             int const result = skipSpaces(line_begin, line_sz, i);
             assert(result == GRAMMAR_OK);
 
             if (*i == line_sz || line_begin[*i] == '\0') return GRAMMAR_SYNTAX_ERROR;
 
-            exp[-1].has_next = 0;
-            rule->n_alt++;
+            if (exp == NULL) return GRAMMAR_SYNTAX_ERROR;
+            exp->has_next = 0;
+            add_alist(rule->alt_list, &(graph->exp_list->len));
             (*i)++;
         } else if (isspace((unsigned char)*(line_begin + *i))) {
             (*i)++;
@@ -134,33 +131,32 @@ static int addExpansions(
             return GRAMMAR_SYNTAX_ERROR;
         }
     }
+    if (exp == NULL) return GRAMMAR_SYNTAX_ERROR;
+    exp->has_next = 0;
 
     return GRAMMAR_OK;
 }
 
-static int addRule(
-    uint32_t* const p_rule_id,
+static uint32_t addRule(
     GrammarGraph* const graph,
     ChunkTable* const rule_tbl,
     char const* const line_begin,
     uint32_t const line_sz,
     uint32_t* const i
 ) {
-    ChunkMapping* mapping;
-    bool ins_result;
+    ChunkMapping* mapping   = NULL;
+    bool ins_result         = 0;
+    Item term               = add_chunk(graph->rule_names, BNF_STR_RULE_OPEN, sizeof(BNF_STR_RULE_OPEN) - 1);
+    uint32_t j              = *i + term.sz;
 
-    Item term   = add_chunk(graph->rule_names, BNF_STR_RULE_OPEN, sizeof(BNF_STR_RULE_OPEN) - 1);
-    uint32_t j  = *i + term.sz;
-
-    if (LITNEQ(line_begin + *i, BNF_STR_RULE_OPEN))             return GRAMMAR_SYNTAX_ERROR;
-    if (j == line_sz || isspace((unsigned char)line_begin[j]))  return GRAMMAR_SYNTAX_ERROR;
+    if (LITNEQ(line_begin + *i, BNF_STR_RULE_OPEN))             return INVALID_UINT32;
+    if (j == line_sz || isspace((unsigned char)line_begin[j]))  return INVALID_UINT32;
     while (LITNEQ(line_begin + j, BNF_STR_RULE_CLOSE)) {
         term = appendLast_chunk(graph->rule_names, line_begin + j++, 1);
         if (j == line_sz || isspace((unsigned char)line_begin[j]) || term.sz >= BNF_MAX_LEN_TERM)
-            return GRAMMAR_SYNTAX_ERROR;
+            return INVALID_UINT32;
     }
     term = appendLast_chunk(graph->rule_names, line_begin + j, sizeof(BNF_STR_RULE_CLOSE) - 1);
-    /* fprintf_verbose(stderr, "RULE = %.*s", term.sz, term.p); */
     j += sizeof(BNF_STR_RULE_CLOSE) - 1;
     *i = j;
 
@@ -169,41 +165,42 @@ static int addRule(
         RuleTerm* const parent  = addIndeterminate_alist(graph->rule_list);
         parent->name_id         = LEN_CHUNK(graph->rule_names) - 1;
         parent->cov_count       = 0;
-        parent->first_alt_id    = INVALID_UINT32;
-        parent->n_alt           = 0;
+        parent->alt_list[0]     = NOT_AN_ALIST;
+        constructEmpty_alist(parent->alt_list, sizeof(uint32_t), ALIST_RECOMMENDED_INITIAL_CAP);
     } else {
         deleteLast_chunk(graph->rule_names);
     }
-    *p_rule_id = mapping->value;
-    return GRAMMAR_OK;
+    return mapping->value;
 }
 
-static int addTerminal(
-    Item* const p_terminal,
+static uint32_t addTerminal(
     GrammarGraph* const graph,
     ChunkTable* const terminal_tbl,
     char const* const line_begin,
     uint32_t const line_sz,
     uint32_t* const i
 ) {
-    ChunkMapping* mapping;
-    Item term   = addIndeterminate_chunk(graph->terminals, 0);
-    uint32_t j  = *i + 1;
+    ChunkMapping* mapping   = NULL;
+    Item term               = addIndeterminate_chunk(graph->terminals, 0);
+    uint32_t j              = *i;
 
-    if (LITNEQ(line_begin + *i, BNF_STR_TERMINAL_OPEN)) return GRAMMAR_SYNTAX_ERROR;
-    if (j == line_sz || line_begin[j] == '\0')          return GRAMMAR_SYNTAX_ERROR;
+    if (LITNEQ(line_begin + j, BNF_STR_TERMINAL_OPEN))  return INVALID_UINT32;
+    j += sizeof(BNF_STR_TERMINAL_OPEN) - 1;
+    if (j == line_sz || line_begin[j] == '\0')          return INVALID_UINT32;
     while (LITNEQ(line_begin + j, BNF_STR_TERMINAL_CLOSE)) {
         term = appendLast_chunk(graph->terminals, line_begin + j++, 1);
         if (j == line_sz || line_begin[j] == '\0' || term.sz >= BNF_MAX_LEN_TERM)
-            return GRAMMAR_SYNTAX_ERROR;
+            return INVALID_UINT32;
     }
-    /* fprintf_verbose(stderr, "TERMINAL = "BNF_STR_TERMINAL_OPEN"%.*s"BNF_STR_TERMINAL_CLOSE, term.sz, term.p); */
     *i = j + sizeof(BNF_STR_TERMINAL_CLOSE) - 1;
 
-    mapping = searchInsert_ctbl(NULL, terminal_tbl, term, LEN_CHUNK(graph->terminals) - 1, CTBL_MODE_INSERT_RESPECT);
-    if (mapping->value != LEN_CHUNK(graph->terminals) - 1) deleteLast_chunk(graph->terminals);
-    *p_terminal = get_chunk(graph->terminals, mapping->value);
-    return GRAMMAR_OK;
+    mapping = searchInsert_ctbl(
+        NULL, terminal_tbl, term, LEN_CHUNK(graph->terminals) - 1, CTBL_MODE_INSERT_RESPECT
+    );
+    if (mapping->value != LEN_CHUNK(graph->terminals) - 1)
+        deleteLast_chunk(graph->terminals);
+
+    return mapping->value;
 }
 
 int construct_ggraph(
@@ -250,10 +247,19 @@ int construct_ggraph(
 }
 
 void destruct_ggraph(GrammarGraph* const graph) {
+    RuleTerm* rule = NULL;
+
     assert(isValid_ggraph(graph));
 
     destruct_chunk(graph->rule_names);
     destruct_chunk(graph->terminals);
+
+    rule = getFirst_alist(graph->rule_list);
+    REPEAT(graph->rule_list->len) {
+        destruct_alist(rule->alt_list);
+        rule++;
+    }
+
     destruct_alist(graph->rule_list);
     destruct_alist(graph->exp_list);
 
@@ -286,20 +292,24 @@ void fillCovMtx_ggraph(
     GrammarGraph const* const graph,
     uint32_t const rule_id
 ) {
+    RuleTerm const* rule        = NULL;
+    uint32_t const* p_exp_id    = NULL;
+    ExpansionTerm const* exp    = NULL;
+
     assert(isValid_bmtx(cov_mtx));
     assert(isValid_ggraph(graph));
     assert(rule_id < graph->rule_list->len);
-    {
-        RuleTerm const* const rule  = get_alist(graph->rule_list, rule_id);
-        ExpansionTerm const* exp    = get_alist(graph->exp_list, rule->first_alt_id);
-        for (uint32_t alt_id = 0; alt_id < rule->n_alt; exp++, alt_id++) {
-            if (exp->cov_count == 0)
-                unset_bmtx(cov_mtx, 0, alt_id);
-            else
-                set_bmtx(cov_mtx, 0, alt_id);
 
-            while (exp->has_next) exp++;
-        }
+    rule        = get_alist(graph->rule_list, rule_id);
+    p_exp_id    = getFirst_alist(rule->alt_list);
+    for (uint32_t alt_id = 0; alt_id < rule->alt_list->len; alt_id++) {
+        exp = get_alist(graph->exp_list, *(p_exp_id++));
+        if (exp->cov_count == 0)
+            unset_bmtx(cov_mtx, 0, alt_id);
+        else
+            set_bmtx(cov_mtx, 0, alt_id);
+
+        while (exp->has_next) exp++;
     }
 }
 
@@ -312,6 +322,7 @@ void generateSentence_ggraph(
     Item terminal               = NOT_AN_ITEM;
     RuleTerm* rule              = NULL;
     uint32_t const* p_decision  = NULL;
+    uint32_t const* p_exp_id    = NULL;
     ExpansionTerm* exp          = NULL;
     uint32_t n_exps             = 0;
 
@@ -328,8 +339,9 @@ void generateSentence_ggraph(
     constructEmpty_alist(stack, sizeof(ExpansionTerm), ALIST_RECOMMENDED_INITIAL_CAP);
     addIndeterminate_chunk(str_builder, 0);
 
-    exp     = getAltExp_ggraph(graph, graph->root_rule_id, *(p_decision++));
-    n_exps  = 1;
+    p_exp_id    = get_alist(rule->alt_list, *(p_decision++));
+    exp         = get_alist(graph->exp_list, *p_exp_id);
+    n_exps      = 1;
     while ((exp++)->has_next) n_exps++;
     REPEAT(n_exps) push_alist(stack, --exp);
 
@@ -347,44 +359,13 @@ void generateSentence_ggraph(
             if (rule->cov_count == 0)           graph->n_cov++;
             if (rule->cov_count < SZ32_MAX)     rule->cov_count++;
 
-            exp = getAltExp_ggraph(graph, exp->rt_id, *(p_decision++));
-            n_exps  = 1;
+            p_exp_id    = get_alist(rule->alt_list, *(p_decision++));
+            exp         = get_alist(graph->exp_list, *p_exp_id);
+            n_exps      = 1;
             while ((exp++)->has_next) n_exps++;
             REPEAT(n_exps) push_alist(stack, --exp);
         }
     } while (stack->len > 0);
-}
-
-ExpansionTerm* getAltExp_ggraph(
-    GrammarGraph* const graph,
-    uint32_t const rule_id,
-    uint32_t const jth_alt
-) {
-    assert(isValid_ggraph(graph));
-    assert(rule_id < graph->rule_list->len);
-    {
-        RuleTerm* const rule = get_alist(graph->rule_list, rule_id);
-        if (rule->n_alt == 0) {
-            assert(jth_alt == 0);
-            assert(rule->first_alt_id == INVALID_UINT32);
-            rule->n_alt         = 1;
-            rule->first_alt_id  = graph->exp_list->len;
-            return addIndeterminate_alist(graph->exp_list);
-        } else {
-            ExpansionTerm* exp = get_alist(graph->exp_list, rule->first_alt_id);
-
-            uint32_t j = 0;
-            for (uint32_t i = 0; i < jth_alt; i++, exp++, j++)
-                while (exp->has_next) { exp++; j++; }
-
-            if (jth_alt < rule->n_alt) {
-                return exp;
-            } else {
-                rule->n_alt++;
-                return insertIndeterminate_alist(graph->exp_list, rule->first_alt_id + j);
-            }
-        }
-    }
 }
 
 bool isValid_ggraph(GrammarGraph const* const graph) {
@@ -407,8 +388,8 @@ static int load_ggraph(
     char* const root_str,
     uint32_t const root_len
 ) {
-    uint32_t rule_id;
-    int load_res = GRAMMAR_OK;
+    uint32_t rule_id    = 0;
+    int load_res        = GRAMMAR_OK;
 
     assert(graph != NULL);
     assert(isValid_ctbl(rule_tbl));
@@ -425,7 +406,7 @@ static int load_ggraph(
 
         if (IS_COMMENT_OR_EMPTY(line_begin, i, line.sz)) continue;
 
-        load_res = addRule(&rule_id, graph, rule_tbl, line_begin, line.sz, &i);
+        rule_id = addRule(graph, rule_tbl, line_begin, line.sz, &i);
         if (load_res != GRAMMAR_OK) return GRAMMAR_SYNTAX_ERROR;
 
         load_res = skipSpaces(line_begin, line.sz, &i);
@@ -455,91 +436,84 @@ uint32_t nTerms_ggraph(GrammarGraph const* const graph) {
 
 void printDot_ggraph(
     FILE* const output,
-    GrammarGraph const* const graph
+    GrammarGraph* const graph
 ) {
-    uint32_t exp_uid = 1;
-
     assert(output != NULL);
     assert(isValid_ggraph(graph));
 
     fprintf(output,
-            "digraph GrammarGraph {\n"
-            "    edge [fontname=\"PT Mono\"];\n"
-            "    node [fontname=\"PT Mono\"];\n"
-            "    root [shape=\"none\",width=0,height=0,label=\"\"];\n"
-            "\n"
+        "digraph GrammarGraph {\n"
+        "    edge [fontname=\"PT Mono\"];\n"
+        "    node [fontname=\"PT Mono\"];\n"
+        "    root [shape=\"none\",width=0,height=0,label=\"\"];\n"
+        "\n"
     );
-    {
-        RuleTerm const* rule = getFirst_alist(graph->rule_list);
-        REPEAT(graph->rule_list->len) {
-            Item const rule_name        = get_chunk(graph->rule_names, rule->name_id);
-            ExpansionTerm const* exp    = get_alist(graph->exp_list, rule->first_alt_id);
+    for (uint32_t rule_id = 0; rule_id < graph->rule_list->len; rule_id++) {
+        RuleTerm const* const rule  = get_alist(graph->rule_list, rule_id);
+        Item const rule_name        = get_chunk(graph->rule_names, rule->name_id);
 
-            fprintf(output,
-                "    \"%.*s\"->e%"PRIu32":p1;\n"
-                "    e%"PRIu32" [shape=\"record\",label=\"",
-                (int)rule_name.sz, (char*)rule_name.p, exp_uid,
-                exp_uid
-            );
+        fprintf(output,
+            "    r%"PRIu32" [label=\"%.*s\"];\n",
+            rule_id, (int)rule_name.sz, (char*)rule_name.p
+        );
+    }
+    for (uint32_t rule_id = 0; rule_id < graph->rule_list->len; rule_id++) {
+        RuleTerm const* const rule  = get_alist(graph->rule_list, rule_id);
+        uint32_t const* p_exp_id    = getFirst_alist(rule->alt_list);
 
-            for (uint32_t i = 1; i <= rule->n_alt; i += !(exp++)->has_next) {
-                Item child_name     = NOT_AN_ITEM;
-                uint32_t port_uid   = 1;
+        for (uint32_t alt_id = 0; alt_id < rule->alt_list->len; alt_id++) {
+            ExpansionTerm const* exp    = get_alist(graph->exp_list, *(p_exp_id++));
+            uint32_t port_id            = 0;
 
-                fprintf(output, "<p%"PRIu32">", port_uid++);
+            fprintf(output, "    r%"PRIu32"e%"PRIu32" [label=\"", rule_id, alt_id);
+            do {
+                fprintf(output, "<p%"PRIu32">", port_id);
                 if (exp->is_terminal) {
-                    child_name = get_chunk(graph->terminals, exp->rt_id);
-                    fprintf(output, "%.*s", (int)child_name.sz, (char*)child_name.p);
+                    Item const terminal = get_chunk(graph->terminals, exp->rt_id);
+                    fprintf(
+                        output,
+                        BNF_STR_TERMINAL_OPEN"%.*s"BNF_STR_TERMINAL_CLOSE,
+                        (int)terminal.sz, (char*)terminal.p
+                    );
                 } else {
-                    RuleTerm const* child   = get_alist(graph->rule_list, exp->rt_id);
-                    child_name              = get_chunk(graph->rule_names, child->name_id);
-                    fprintf(output,
+                    RuleTerm const* const child = get_alist(graph->rule_list, exp->rt_id);
+                    Item const child_name       = get_chunk(graph->rule_names, child->name_id);
+                    fprintf(
+                        output,
                         "\\%.*s\\"BNF_STR_RULE_CLOSE,
                         (int)(child_name.sz + 1 - sizeof(BNF_STR_RULE_CLOSE)), (char*)child_name.p
                     );
                 }
-
-                if (exp->has_next) {
-                    fprintf(output, BNF_STR_ALTERNATIVE);
-                } else {
-                    uint32_t const n_ports = port_uid;
-
-                    fprintf(output, "\"];\n");
-
-                    exp -= n_ports - 1;
-                    for (port_uid = 1; port_uid <= n_ports; port_uid++) {
-                        if (exp->is_terminal) {
-                            child_name = get_chunk(graph->terminals, exp->rt_id);
-                        } else {
-                            RuleTerm const* child   = get_alist(graph->rule_list, exp->rt_id);
-                            child_name              = get_chunk(graph->rule_names, child->name_id);
-                        }
-                        fprintf(output,
-                            "    e%"PRIu32":p%"PRIu32"->\"%.*s\";\n",
-                            exp_uid, port_uid,
-                            (int)child_name.sz, (char*)child_name.p
-                        );
-                    }
-                    exp += n_ports - 1;
-
-                    exp_uid++;
-                    if (i < rule->n_alt)
-                        fprintf(output,
-                            "    \"%.*s\"->e%"PRIu32":p1;\n"
-                            "    e%"PRIu32" [shape=\"record\",label=\"",
-                            (int)rule_name.sz, (char*)rule_name.p, exp_uid,
-                            exp_uid
-                        );
-                }
-            }
+                port_id++;
+                if (exp->has_next) fprintf(output, "|");
+            } while ((exp++)->has_next);
+            fprintf(output, "\",shape=\"record\"];\n");
         }
     }
 
-    fprintf(output, "\n");
+    for (uint32_t rule_id = 0; rule_id < graph->rule_list->len; rule_id++) {
+        RuleTerm const* const rule  = get_alist(graph->rule_list, rule_id);
+        uint32_t const* p_exp_id    = getFirst_alist(rule->alt_list);
 
-    for (uint32_t i = 0; i < LEN_CHUNK(graph->terminals); i++) {
-        Item const terminal = get_chunk(graph->terminals, i);
-        fprintf(output, "    \"%.*s\" [shape=\"none\",height=0];\n", (int)terminal.sz, (char*)terminal.p);
+        for (uint32_t alt_id = 0; alt_id < rule->alt_list->len; alt_id++) {
+            ExpansionTerm const* exp    = get_alist(graph->exp_list, *(p_exp_id++));
+            uint32_t port_id            = 1;
+
+            fprintf(
+                output,
+                "    r%"PRIu32"->r%"PRIu32"e%"PRIu32":p0;\n",
+                rule_id, rule_id, alt_id
+            );
+            do {
+                uint32_t const child_id = exp->rt_id;
+                if (exp->is_terminal) continue;
+                fprintf(
+                    output,
+                    "    r%"PRIu32"e%"PRIu32":p%"PRIu32"->r%"PRIu32";\n",
+                    rule_id, alt_id, port_id++, child_id
+                );
+            } while ((exp++)->has_next);
+        }
     }
 
     fprintf(output, "}\n");

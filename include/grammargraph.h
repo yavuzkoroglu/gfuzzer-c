@@ -23,8 +23,7 @@
     typedef struct RuleTermBody {
         uint32_t    name_id;
         uint32_t    cov_count;
-        uint32_t    first_alt_id;
-        uint32_t    n_alt;
+        ArrayList   alt_list[1];
     } RuleTerm;
 
     /* is_terminal == !is_rule */
@@ -60,15 +59,9 @@
         ArrayList const* const decision_sequence
     );
 
-    ExpansionTerm* getAltExp_ggraph(
-        GrammarGraph* const graph,
-        uint32_t const rule_id,
-        uint32_t const jth_alt
-    );
-
     void printDot_ggraph(
         FILE* const output,
-        GrammarGraph const* const graph
+        GrammarGraph* const graph
     );
 
     uint32_t nTerms_ggraph(GrammarGraph const* const graph);

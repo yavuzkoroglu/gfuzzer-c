@@ -2,6 +2,8 @@
     #define DECISION_TREE_H
     #include "grammargraph.h"
 
+    #define NOT_A_DTREE                             ((DecisionTree){ NOT_AN_ALIST })
+
     typedef struct DecisionTreeBody {
         ArrayList   node_list[1];
     } DecisionTree;
