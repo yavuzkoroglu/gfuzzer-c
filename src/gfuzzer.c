@@ -41,7 +41,7 @@ static void generateAndPrintSentencesWithinTimeout(
     constructEmpty_dtree(dtree);
 
     time(&ts);
-    while (n > 0 && difftime(time(NULL), ts) < t) {
+    while (n-- > 0 && difftime(time(NULL), ts) < t) {
         switch (generateRandomDecisionSequence_dtree(seq, dtree, graph, min_depth, cov_guided, unique)) {
             case DTREE_GENERATE_NO_UNIQUE_SEQ_REMAINING:
                 fprintf_verbose(stderr, "Exhausted all unique sentences!");

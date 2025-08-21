@@ -193,12 +193,10 @@ uint32_t partiallyExploreNode_dtree(
 
     child = get_alist(dtree->node_list, node->first_child_id);
     for (choice = 0; choice < node->n_choices; choice++, child++) {
-        uint32_t const child_id = node->first_child_id + choice;
-
         if (unique && child->state == DTREE_NODE_STATE_FULLY_EXPLORED) continue;
         if (cov_guided && !all_covered_once && get_bmtx(cov_mtx, 0, choice)) continue;
 
-        add_alist(decision_list, &child_id);
+        add_alist(decision_list, &choice);
     }
 
     if (cov_guided) destruct_bmtx(cov_mtx);
