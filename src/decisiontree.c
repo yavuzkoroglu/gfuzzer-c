@@ -1,5 +1,7 @@
 #include <assert.h>
+#include <inttypes.h>
 #include <stdlib.h>
+#include "bnf.h"
 #include "decisiontree.h"
 #include "padkit/bitmatrix.h"
 #include "padkit/invalid.h"
@@ -208,6 +210,93 @@ uint32_t partiallyExploreNode_dtree(
     destruct_alist(decision_list);
 
     return decision;
+}
+
+struct IdPair {
+    uint32_t node_id;
+    uint32_t rule_id;
+};
+void printDot_dtree(
+    FILE* const output,
+    DecisionTree const* const dtree,
+    GrammarGraph const* const graph
+) {
+    DecisionTreeNode const* node    = NULL;
+    RuleTerm const* rule            = NULL;
+    RuleTerm const* child_rule      = NULL;
+    ExpansionTerm const* exp        = NULL;
+    struct IdPair* id_pair          = NULL;
+    struct IdPair* child_id_pair    = NULL;
+    ArrayList stack[1]              = { NOT_AN_ALIST };
+    Item term                       = NOT_AN_ITEM;
+    uint32_t child_id               = INVALID_UINT32;
+    uint32_t exp_id                 = INVALID_UINT32;
+
+    assert(output != NULL);
+    assert(isValid_dtree(dtree));
+    assert(isValid_ggraph(graph));
+
+    fprintf(output,
+        "digraph GrammarGraph {\n"
+        "    edge [fontname=\"PT Mono\"];\n"
+        "    node [fontname=\"PT Mono\",label=\"\",shape=\"circle\"];\n"
+        "    root [shape=\"none\",width=0,height=0,label=\"\"];\n"
+        "\n"
+    );
+    node = getFirst_alist(dtree->node_list);
+    for (uint32_t node_id = 0; node_id < dtree->node_list->len; node++, node_id++) {
+        switch (node->state) {
+            case DTREE_NODE_STATE_PARTIALLY_EXPLORED:
+                fprintf(output, "    n%"PRIu32";\n", node_id);
+                break;
+            case DTREE_NODE_STATE_FULLY_EXPLORED:
+                fprintf(output, "    n%"PRIu32" [peripheries=2];\n", node_id);
+                break;
+            case DTREE_NODE_STATE_UNEXPLORED:
+            default:
+                fprintf(output, "    n%"PRIu32" [label=\"??\",shape=\"none\",height=0];\n", node_id);
+        }
+    }
+
+    constructEmpty_alist(stack, sizeof(struct IdPair), ALIST_RECOMMENDED_INITIAL_CAP);
+    id_pair             = pushIndeterminate_alist(stack);
+    id_pair->node_id    = 0;
+    id_pair->rule_id    = 0;
+    do {
+        id_pair = pop_alist(stack);
+
+        node = get_alist(dtree->node_list, id_pair->node_id);
+        if (node->n_choices == 0) continue;
+        rule = get_alist(graph->rule_list, id_pair->rule_id);
+
+        for (uint32_t choice = 0; choice < node->n_choices; choice++) {
+            child_id    = node->first_child_id + choice;
+            exp_id      = *(uint32_t*)get_alist(rule->alt_list, choice);
+            exp         = get_alist(graph->exp_list, exp_id);
+
+            fprintf(output, "    n%"PRIu32"->n%"PRIu32" [label=\"", id_pair->node_id, child_id);
+            do {
+                child_id_pair = pushIndeterminate_alist(stack);
+                child_id_pair->node_id = child_id;
+                child_id_pair->rule_id = exp->rt_id;
+                if (exp->is_terminal) {
+                    term = get_chunk(graph->terminals, exp->rt_id);
+                    fprintf(
+                        output, BNF_STR_TERMINAL_OPEN"%.*s"BNF_STR_TERMINAL_CLOSE,
+                        (int)term.sz, (char*)term.p
+                    );
+                } else {
+                    child_rule  = get_alist(graph->rule_list, exp->rt_id);
+                    term        = get_chunk(graph->rule_names, child_rule->name_id);
+                    fprintf(output, "%.*s", (int)term.sz, (char*)term.p);
+                }
+            } while ((exp++)->has_next);
+            fprintf(output, "\"];\n");
+        }
+    } while (stack->len > 0);
+    destruct_alist(stack);
+
+    fprintf(output, "}\n");
 }
 
 void propagateUpState_dtree(

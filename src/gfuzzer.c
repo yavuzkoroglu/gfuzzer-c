@@ -22,7 +22,7 @@ static void generateAndPrintSentencesWithinTimeout(
     GrammarGraph* const graph,
     uint32_t n, uint32_t const t, uint32_t const min_depth,
     bool cov_guided, bool unique,
-    FILE* const fp
+    FILE* fp
 ) {
     Item sentence           = NOT_AN_ITEM;
     Chunk str_builder[1]    = { NOT_A_CHUNK };
@@ -34,7 +34,6 @@ static void generateAndPrintSentencesWithinTimeout(
     assert(n <= MAX_N);
     assert(t <= MAX_TIMEOUT);
     assert(min_depth <= MAX_DEPTH);
-    (void)fp;
 
     constructEmpty_chunk(str_builder, CHUNK_RECOMMENDED_PARAMETERS);
     constructEmpty_alist(seq, sizeof(uint32_t), ALIST_RECOMMENDED_INITIAL_CAP);
@@ -56,6 +55,11 @@ static void generateAndPrintSentencesWithinTimeout(
                 flush_chunk(str_builder);
         }
         flush_alist(seq);
+
+        if (fp) {
+            printDot_dtree(fp, dtree, graph);
+            fp = NULL;
+        }
     }
 
     destruct_dtree(dtree);

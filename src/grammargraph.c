@@ -436,7 +436,7 @@ uint32_t nTerms_ggraph(GrammarGraph const* const graph) {
 
 void printDot_ggraph(
     FILE* const output,
-    GrammarGraph* const graph
+    GrammarGraph const* const graph
 ) {
     assert(output != NULL);
     assert(isValid_ggraph(graph));
@@ -453,9 +453,14 @@ void printDot_ggraph(
         Item const rule_name        = get_chunk(graph->rule_names, rule->name_id);
 
         fprintf(output,
-            "    r%"PRIu32" [label=\"%.*s\"];\n",
+            "    r%"PRIu32" [label=\"%.*s\"",
             rule_id, (int)rule_name.sz, (char*)rule_name.p
         );
+
+        if (rule->cov_count == 0)
+            fprintf(output, "];\n");
+        else
+            fprintf(output, ",style=\"filled\"];\n");
     }
     for (uint32_t rule_id = 0; rule_id < graph->rule_list->len; rule_id++) {
         RuleTerm const* const rule  = get_alist(graph->rule_list, rule_id);
@@ -487,10 +492,13 @@ void printDot_ggraph(
                 port_id++;
                 if (exp->has_next) fprintf(output, "|");
             } while ((exp++)->has_next);
-            fprintf(output, "\",shape=\"record\"];\n");
+            fprintf(output, "\",shape=\"record\"");
+            if (exp->cov_count == 0)
+                fprintf(output, "];\n");
+            else
+                fprintf(output, ",style=\"filled\"];\n");
         }
     }
-
     for (uint32_t rule_id = 0; rule_id < graph->rule_list->len; rule_id++) {
         RuleTerm const* const rule  = get_alist(graph->rule_list, rule_id);
         uint32_t const* p_exp_id    = getFirst_alist(rule->alt_list);

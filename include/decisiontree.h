@@ -59,6 +59,12 @@
         bool const cov_guided, bool const unique
     );
 
+    void printDot_dtree(
+        FILE* const fp,
+        DecisionTree const* const dtree,
+        GrammarGraph const* const graph
+    );
+
     void propagateUpState_dtree(
         DecisionTree* const dtree,
         uint32_t const node_id
