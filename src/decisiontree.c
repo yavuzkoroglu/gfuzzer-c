@@ -38,29 +38,6 @@ void destruct_dtree(DecisionTree* const dtree) {
     destruct_alist(dtree->node_list);
 }
 
-void finalizeSeq_dtree(
-    ArrayList* const seq,
-    DecisionTree* const dtree,
-    uint32_t const node_id
-) {
-    uint32_t last_decision  = INVALID_UINT32;
-    uint32_t leaf_id        = INVALID_UINT32;
-    DecisionTreeNode* node  = NULL;
-
-    assert(isValid_alist(seq));
-    assert(seq->sz_elem == sizeof(uint32_t));
-    assert(isValid_dtree(dtree));
-    assert(node_id < dtree->node_list->len);
-
-    last_decision   = *(uint32_t*)getLast_alist(seq);
-    node            = get_alist(dtree->node_list, node_id);
-    leaf_id         = node->first_child_id + last_decision;
-
-    assert(leaf_id < dtree->node_list->len);
-
-    setLeaf_dtree(dtree, node_id, leaf_id);
-}
-
 int generateRandomDecisionSequence_dtree(
     ArrayList* const seq,
     DecisionTree* const dtree,
@@ -114,7 +91,7 @@ int generateRandomDecisionSequence_dtree(
     } while (stack->len > 0);
     destruct_alist(stack);
 
-    finalizeSeq_dtree(seq, dtree, node_id);
+    setLeaf_dtree(dtree, node_id);
 
     if (seq->len < min_depth)
         return DTREE_GENERATE_SHALLOW_SEQ;
@@ -195,8 +172,8 @@ uint32_t partiallyExploreNode_dtree(
 
     child = get_alist(dtree->node_list, node->first_child_id);
     for (choice = 0; choice < node->n_choices; choice++, child++) {
-        if (unique && child->state == DTREE_NODE_STATE_FULLY_EXPLORED) continue;
-        if (cov_guided && !all_covered_once && get_bmtx(cov_mtx, 0, choice)) continue;
+        if (unique && child->state == DTREE_NODE_STATE_FULLY_EXPLORED)          continue;
+        if (cov_guided && !all_covered_once && get_bmtx(cov_mtx, 0, choice))    continue;
 
         add_alist(decision_list, &choice);
     }
@@ -204,7 +181,8 @@ uint32_t partiallyExploreNode_dtree(
     if (cov_guided) destruct_bmtx(cov_mtx);
 
     assert(decision_list->len > 0);
-    decision = *(uint32_t*)get_alist(decision_list, (uint32_t)rand() % decision_list->len);
+    decision    = *(uint32_t*)get_alist(decision_list, (uint32_t)rand() % decision_list->len);
+    *p_node_id  = node->first_child_id + decision;
     add_alist(seq, &decision);
 
     destruct_alist(decision_list);
@@ -231,6 +209,7 @@ void printDot_dtree(
     Item term                       = NOT_AN_ITEM;
     uint32_t child_id               = INVALID_UINT32;
     uint32_t exp_id                 = INVALID_UINT32;
+    uint32_t n_exps                 = 0;
 
     assert(output != NULL);
     assert(isValid_dtree(dtree));
@@ -261,7 +240,7 @@ void printDot_dtree(
     constructEmpty_alist(stack, sizeof(struct IdPair), ALIST_RECOMMENDED_INITIAL_CAP);
     id_pair             = pushIndeterminate_alist(stack);
     id_pair->node_id    = 0;
-    id_pair->rule_id    = 0;
+    id_pair->rule_id    = graph->root_rule_id;
     do {
         id_pair = pop_alist(stack);
 
@@ -273,9 +252,11 @@ void printDot_dtree(
             child_id    = node->first_child_id + choice;
             exp_id      = *(uint32_t*)get_alist(rule->alt_list, choice);
             exp         = get_alist(graph->exp_list, exp_id);
+            n_exps      = 1;
+            while (exp->has_next) { exp++; n_exps++; }
 
             fprintf(output, "    n%"PRIu32"->n%"PRIu32" [label=\"", id_pair->node_id, child_id);
-            do {
+            REPEAT(n_exps) {
                 child_id_pair = pushIndeterminate_alist(stack);
                 child_id_pair->node_id = child_id;
                 child_id_pair->rule_id = exp->rt_id;
@@ -290,7 +271,8 @@ void printDot_dtree(
                     term        = get_chunk(graph->rule_names, child_rule->name_id);
                     fprintf(output, "%.*s", (int)term.sz, (char*)term.p);
                 }
-            } while ((exp++)->has_next);
+                exp--;
+            }
             fprintf(output, "\"];\n");
         }
     } while (stack->len > 0);
@@ -303,34 +285,32 @@ void propagateUpState_dtree(
     DecisionTree* const dtree,
     uint32_t const node_id
 ) {
+    DecisionTreeNode* node = NULL;
+
     assert(isValid_dtree(dtree));
     assert(node_id < dtree->node_list->len);
-    {
-        DecisionTreeNode* node = get_alist(dtree->node_list, node_id);
-        if (node->state != DTREE_NODE_STATE_FULLY_EXPLORED) return;
-        while (node->parent_id < dtree->node_list->len) {
-            if (!isAllChildrenFullyExplored_dtree(dtree, node->parent_id)) return;
-            node        = get_alist(dtree->node_list, node->parent_id);
-            node->state = DTREE_NODE_STATE_FULLY_EXPLORED;
-        }
+
+    node = get_alist(dtree->node_list, node_id);
+    if (node->state != DTREE_NODE_STATE_FULLY_EXPLORED) return;
+    while (node->parent_id < dtree->node_list->len) {
+        if (!isAllChildrenFullyExplored_dtree(dtree, node->parent_id)) return;
+        node        = get_alist(dtree->node_list, node->parent_id);
+        node->state = DTREE_NODE_STATE_FULLY_EXPLORED;
     }
 }
 
 void setLeaf_dtree(
     DecisionTree* const dtree,
-    uint32_t const parent_id,
     uint32_t const leaf_id
 ) {
     DecisionTreeNode* leaf = NULL;
 
     assert(isValid_dtree(dtree));
-    assert(parent_id < dtree->node_list->len);
     assert(leaf_id < dtree->node_list->len);
 
     leaf = get_alist(dtree->node_list, leaf_id);
     assert(leaf->state == DTREE_NODE_STATE_UNEXPLORED);
     leaf->state     = DTREE_NODE_STATE_FULLY_EXPLORED;
     leaf->n_choices = 0;
-    leaf->parent_id = parent_id;
     propagateUpState_dtree(dtree, leaf_id);
 }

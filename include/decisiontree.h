@@ -28,12 +28,6 @@
 
     void destruct_dtree(DecisionTree* const tree);
 
-    void finalizeSeq_dtree(
-        ArrayList* const seq,
-        DecisionTree* const dtree,
-        uint32_t const node_id
-    );
-
     #define DTREE_GENERATE_OK                       (0)
     #define DTREE_GENERATE_SHALLOW_SEQ              (1)
     #define DTREE_GENERATE_NO_UNIQUE_SEQ_REMAINING  (2)
@@ -72,7 +66,6 @@
 
     void setLeaf_dtree(
         DecisionTree* const dtree,
-        uint32_t const parent_id,
         uint32_t const leaf_id
     );
 #endif

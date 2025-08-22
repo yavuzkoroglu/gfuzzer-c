@@ -4,6 +4,7 @@
 #include <time.h>
 #include "bnf.h"
 #include "decisiontree.h"
+#include "padkit/implication.h"
 #include "padkit/memalloc.h"
 #include "padkit/verbose.h"
 
@@ -16,13 +17,13 @@
 #define DEFAULT_UNIQUE      (1)
 #define DEFAULT_SEED        (131077)
 #define DEFAULT_N           (0)
-#define DEFAULT_TIMEOUT     (60)
+#define DEFAULT_TIMEOUT     (0)
 
 static void generateAndPrintSentencesWithinTimeout(
     GrammarGraph* const graph,
     uint32_t n, uint32_t const t, uint32_t const min_depth,
     bool cov_guided, bool unique,
-    FILE* fp
+    FILE* const fp
 ) {
     Item sentence           = NOT_AN_ITEM;
     Chunk str_builder[1]    = { NOT_A_CHUNK };
@@ -40,7 +41,7 @@ static void generateAndPrintSentencesWithinTimeout(
     constructEmpty_dtree(dtree);
 
     time(&ts);
-    while (n-- > 0 && difftime(time(NULL), ts) < t) {
+    while (n-- > 0 && IMPLIES(t != 0, t > difftime(time(NULL), ts))) {
         switch (generateRandomDecisionSequence_dtree(seq, dtree, graph, min_depth, cov_guided, unique)) {
             case DTREE_GENERATE_NO_UNIQUE_SEQ_REMAINING:
                 fprintf_verbose(stderr, "Exhausted all unique sentences!");
@@ -55,12 +56,8 @@ static void generateAndPrintSentencesWithinTimeout(
                 flush_chunk(str_builder);
         }
         flush_alist(seq);
-
-        if (fp) {
-            printDot_dtree(fp, dtree, graph);
-            fp = NULL;
-        }
     }
+    if (fp) printDot_dtree(fp, dtree, graph);
 
     destruct_dtree(dtree);
     destruct_alist(seq);
@@ -185,22 +182,11 @@ static void showErrorSyntax(void) {
     );
 }
 
-static void showErrorTimeoutZero(void) {
-    fputs(
-        "\n"
-        "[ERROR] - Timeout NUMBER cannot be zero\n"
-        "\n"
-        "gfuzzer --help for more instructions\n"
-        "\n",
-        stderr
-    );
-}
-
 static void showErrorTimeoutTooLarge(uint32_t const t) {
     fprintf(
         stderr,
         "\n"
-        "[ERROR] - Timeout NUMBER must NOT exceed %d (t = %"PRIu32")\n"
+        "[ERROR] - Timeout NUMBER must NOT exceed %d (TIMEOUT = %"PRIu32")\n"
         "\n"
         "gfuzzer --help for more instructions\n"
         "\n",
@@ -394,7 +380,7 @@ int main(
         is_arg_processed[i + 1] = 1;
         break;
     }
-    fprintf_verbose(stderr, "MIN_DEPTH = %"PRIu32" expansions", min_depth);
+    fprintf_verbose(stderr, "MIN_DEPTH = %"PRIu32, min_depth);
 
     PROCESS_ARG("-n", "--number") {
         if (i == argc - 1) {
@@ -416,10 +402,10 @@ int main(
         is_arg_processed[i + 1] = 1;
         break;
     }
-    fprintf_verbose(stderr, "n = %"PRIu32" sentences", n);
+    fprintf_verbose(stderr, "# SENTENCES = %"PRIu32, n);
 
     PROCESS_ARG("-p", "--prefix-tree") {
-        if (i == argc - 1 || (dot_filename = argv[i + 1])[0] == '-') {
+        if (i == argc - 1 || (pre_filename = argv[i + 1])[0] == '-') {
             showErrorParameterMissing("FILENAME", "-p or --prefix-tree");
             free(is_arg_processed);
             return EXIT_FAILURE;
@@ -504,11 +490,6 @@ int main(
             free(is_arg_processed);
             return EXIT_FAILURE;
         }
-        if (t == 0) {
-            showErrorTimeoutZero();
-            free(is_arg_processed);
-            return EXIT_FAILURE;
-        }
         if (t > MAX_TIMEOUT) {
             showErrorTimeoutTooLarge(t);
             free(is_arg_processed);
@@ -518,7 +499,10 @@ int main(
         is_arg_processed[i + 1] = 1;
         break;
     }
-    fprintf_verbose(stderr, "t = %"PRIu32" seconds", t);
+    if (t == 1)
+        fprintf_verbose(stderr, "TIMEOUT = %"PRIu32" second", t);
+    else
+        fprintf_verbose(stderr, "TIMEOUT = %"PRIu32" seconds", t);
 
     fp = fopen(bnf_filename, "r");
     if (fp == NULL) {
