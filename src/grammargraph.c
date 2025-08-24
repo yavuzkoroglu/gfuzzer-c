@@ -343,10 +343,7 @@ void generateSentence_ggraph(
     exp         = get_alist(graph->exp_list, *p_exp_id);
     n_exps      = 1;
     while ((exp++)->has_next) n_exps++;
-    REPEAT(n_exps) {
-        exp--;
-        push_alist(stack, &exp);
-    }
+    REPEAT(n_exps) { exp--; push_alist(stack, &exp); }
 
     do {
         exp = *(ExpansionTerm**)pop_alist(stack);
@@ -366,10 +363,7 @@ void generateSentence_ggraph(
             exp         = get_alist(graph->exp_list, *p_exp_id);
             n_exps      = 1;
             while ((exp++)->has_next) n_exps++;
-            REPEAT(n_exps) {
-                exp--;
-                push_alist(stack, &exp);
-            }
+            REPEAT(n_exps) { exp--; push_alist(stack, &exp); }
         }
     } while (stack->len > 0);
 }

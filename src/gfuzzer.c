@@ -12,7 +12,7 @@
 #define MAX_N               (4194304)
 #define MAX_TIMEOUT         (604800)
 
-#define DEFAULT_COV_GUIDED  (0)
+#define DEFAULT_COV_GUIDED  (1)
 #define DEFAULT_MIN_DEPTH   (0)
 #define DEFAULT_UNIQUE      (1)
 #define DEFAULT_SEED        (131077)
@@ -53,8 +53,8 @@ static void generateAndPrintSentencesWithinTimeout(
                 generateSentence_ggraph(str_builder, graph, seq);
                 sentence = getLast_chunk(str_builder);
                 printf("%.*s\n", (int)sentence.sz, (char*)sentence.p);
-                flush_chunk(str_builder);
         }
+        flush_chunk(str_builder);
         flush_alist(seq);
     }
     if (fp) printDot_dtree(fp, dtree, graph);
@@ -204,7 +204,7 @@ static void showUsage(char const* const path) {
         "\n"
         "GENERAL OPTIONS:\n"
         "  -b,--bnf FILENAME            (Mandatory) An input grammar in Backus-Naur Form\n"
-        "  -c,--cov-guided              Enable coverage guidance optimization (Default: Disabled)\n"
+        "  -c,--cov-guided              Disable coverage guidance optimization (Default: Enabled)\n"
         "  -C,--copyright               Output the copyright message and exit\n"
         "  -d,--dot-file FILENAME       Output the BNF in DOT format (Default: Disabled)\n"
         "  -h,--help                    Output this help message and exit\n"
@@ -228,7 +228,7 @@ static void showUsage(char const* const path) {
         "  * Rule names cannot contain whitespace.\n"
         "\n"
         "EXAMPLE USES:\n"
-        "  %.*s -b bnf/numbers.bnf -c -n 10 -r \""BNF_STR_RULE_OPEN"number"BNF_STR_RULE_CLOSE"\" -t 10\n"
+        "  %.*s -b bnf/numbers.bnf -m 10 -n 10\n"
         "\n",
         DEFAULT_MIN_DEPTH, DEFAULT_N, DEFAULT_SEED, DEFAULT_TIMEOUT, FILENAME_MAX, path
     );
@@ -337,7 +337,7 @@ int main(
     }
 
     PROCESS_ARG("-c", "--cov-guided") {
-        cov_guided       = 1;
+        cov_guided          = !DEFAULT_COV_GUIDED;
         is_arg_processed[i] = 1;
         break;
     }
