@@ -162,7 +162,7 @@ uint32_t partiallyExploreNode_dtree(
     }
 
     if (cov_guided) construct_bmtx(cov_mtx, 1, node->n_choices);
-    constructEmpty_alist(decision_list, sizeof(uint32_t), node->n_choices + 1);
+    constructEmpty_alist(decision_list, sizeof(uint32_t), node->n_choices);
 
     if (cov_guided) {
         fillCovMtx_ggraph(cov_mtx, graph, *p_node_id);
@@ -203,8 +203,9 @@ void printDot_dtree(
     RuleTerm const* rule            = NULL;
     RuleTerm const* child_rule      = NULL;
     ExpansionTerm const* exp        = NULL;
-    struct IdPair* id_pair          = NULL;
-    struct IdPair* child_id_pair    = NULL;
+    struct IdPair id_pair[2]        = { { INVALID_UINT32, INVALID_UINT32 }, { INVALID_UINT32, INVALID_UINT32 } };
+    struct IdPair* id_pair_A        = id_pair;
+    struct IdPair* id_pair_B        = id_pair + 1;
     ArrayList stack[1]              = { NOT_AN_ALIST };
     Item term                       = NOT_AN_ITEM;
     uint32_t child_id               = INVALID_UINT32;
@@ -237,29 +238,26 @@ void printDot_dtree(
         }
     }
 
+    fprintf(output, "    root->n0;\n");
     constructEmpty_alist(stack, sizeof(struct IdPair), ALIST_RECOMMENDED_INITIAL_CAP);
-    id_pair             = pushIndeterminate_alist(stack);
-    id_pair->node_id    = 0;
-    id_pair->rule_id    = graph->root_rule_id;
+    *id_pair_A = (struct IdPair){ 0, graph->root_rule_id };
+    push_alist(stack, id_pair_A);
     do {
-        id_pair = pop_alist(stack);
+        *id_pair_A = *(struct IdPair*)pop_alist(stack);
 
         node = get_alist(dtree->node_list, id_pair->node_id);
-        if (node->n_choices == 0) continue;
+        if (node->n_choices == 0 || node->state == DTREE_NODE_STATE_UNEXPLORED) continue;
         rule = get_alist(graph->rule_list, id_pair->rule_id);
 
         for (uint32_t choice = 0; choice < node->n_choices; choice++) {
             child_id    = node->first_child_id + choice;
             exp_id      = *(uint32_t*)get_alist(rule->alt_list, choice);
             exp         = get_alist(graph->exp_list, exp_id);
-            n_exps      = 1;
-            while (exp->has_next) { exp++; n_exps++; }
+            n_exps      = 0;
 
-            fprintf(output, "    n%"PRIu32"->n%"PRIu32" [label=\"", id_pair->node_id, child_id);
-            REPEAT(n_exps) {
-                child_id_pair = pushIndeterminate_alist(stack);
-                child_id_pair->node_id = child_id;
-                child_id_pair->rule_id = exp->rt_id;
+            fprintf(output, "    n%"PRIu32"->n%"PRIu32" [label=\"", id_pair_A->node_id, child_id);
+
+            do {
                 if (exp->is_terminal) {
                     term = get_chunk(graph->terminals, exp->rt_id);
                     fprintf(
@@ -267,11 +265,21 @@ void printDot_dtree(
                         (int)term.sz, (char*)term.p
                     );
                 } else {
+                    *id_pair_B  = (struct IdPair){ child_id, exp->rt_id };
                     child_rule  = get_alist(graph->rule_list, exp->rt_id);
                     term        = get_chunk(graph->rule_names, child_rule->name_id);
                     fprintf(output, "%.*s", (int)term.sz, (char*)term.p);
                 }
+                n_exps++;
+            } while ((exp++)->has_next);
+
+            REPEAT(n_exps) {
                 exp--;
+
+                if (exp->is_terminal) continue;
+
+                *id_pair_B  = (struct IdPair){ child_id, exp->rt_id };
+                push_alist(stack, id_pair_B);
             }
             fprintf(output, "\"];\n");
         }
