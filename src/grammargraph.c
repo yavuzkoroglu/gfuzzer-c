@@ -336,17 +336,20 @@ void generateSentence_ggraph(
     if (rule->cov_count == 0)       graph->n_cov++;
     if (rule->cov_count < SZ32_MAX) rule->cov_count++;
 
-    constructEmpty_alist(stack, sizeof(ExpansionTerm), ALIST_RECOMMENDED_INITIAL_CAP);
+    constructEmpty_alist(stack, sizeof(ExpansionTerm*), ALIST_RECOMMENDED_INITIAL_CAP);
     addIndeterminate_chunk(str_builder, 0);
 
     p_exp_id    = get_alist(rule->alt_list, *(p_decision++));
     exp         = get_alist(graph->exp_list, *p_exp_id);
     n_exps      = 1;
     while ((exp++)->has_next) n_exps++;
-    REPEAT(n_exps) push_alist(stack, --exp);
+    REPEAT(n_exps) {
+        exp--;
+        push_alist(stack, &exp);
+    }
 
     do {
-        exp = pop_alist(stack);
+        exp = *(ExpansionTerm**)pop_alist(stack);
 
         if (exp->cov_count == 0)        graph->n_cov++;
         if (exp->cov_count < SZ32_MAX)  exp->cov_count++;
@@ -356,14 +359,17 @@ void generateSentence_ggraph(
             appendLast_chunk(str_builder, terminal.p, terminal.sz);
         } else {
             rule = get_alist(graph->rule_list, exp->rt_id);
-            if (rule->cov_count == 0)           graph->n_cov++;
-            if (rule->cov_count < SZ32_MAX)     rule->cov_count++;
+            if (rule->cov_count == 0)       graph->n_cov++;
+            if (rule->cov_count < SZ32_MAX) rule->cov_count++;
 
             p_exp_id    = get_alist(rule->alt_list, *(p_decision++));
             exp         = get_alist(graph->exp_list, *p_exp_id);
             n_exps      = 1;
             while ((exp++)->has_next) n_exps++;
-            REPEAT(n_exps) push_alist(stack, --exp);
+            REPEAT(n_exps) {
+                exp--;
+                push_alist(stack, &exp);
+            }
         }
     } while (stack->len > 0);
 }
@@ -469,6 +475,7 @@ void printDot_ggraph(
         for (uint32_t alt_id = 0; alt_id < rule->alt_list->len; alt_id++) {
             ExpansionTerm const* exp    = get_alist(graph->exp_list, *(p_exp_id++));
             uint32_t port_id            = 0;
+            bool is_covered             = 0;
 
             fprintf(output, "    r%"PRIu32"e%"PRIu32" [label=\"", rule_id, alt_id);
             do {
@@ -491,12 +498,13 @@ void printDot_ggraph(
                 }
                 port_id++;
                 if (exp->has_next) fprintf(output, "|");
+                is_covered = is_covered || exp->cov_count > 0;
             } while ((exp++)->has_next);
             fprintf(output, "\",shape=\"record\"");
-            if (exp->cov_count == 0)
-                fprintf(output, "];\n");
-            else
+            if (is_covered)
                 fprintf(output, ",style=\"filled\"];\n");
+            else
+                fprintf(output, "];\n");
         }
     }
     for (uint32_t rule_id = 0; rule_id < graph->rule_list->len; rule_id++) {

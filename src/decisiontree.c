@@ -165,7 +165,7 @@ uint32_t partiallyExploreNode_dtree(
     constructEmpty_alist(decision_list, sizeof(uint32_t), node->n_choices);
 
     if (cov_guided) {
-        fillCovMtx_ggraph(cov_mtx, graph, *p_node_id);
+        fillCovMtx_ggraph(cov_mtx, graph, rule_id);
         for (choice = 0; choice < node->n_choices && get_bmtx(cov_mtx, 0, choice); choice++) {}
         all_covered_once = (choice >= node->n_choices);
     }
