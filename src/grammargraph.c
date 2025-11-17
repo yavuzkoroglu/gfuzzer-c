@@ -89,7 +89,7 @@ static int addExpansions(
     uint32_t const line_sz,
     uint32_t* const i
 ) {
-    RuleTerm* rule      = get_alist(graph->rule_list, rule_id);
+    RuleTerm* rule      = (RuleTerm*)get_alist(graph->rule_list, rule_id);
     ExpansionTerm* exp  = NULL;
 
     add_alist(rule->alt_list, &(graph->exp_list->len));
@@ -101,7 +101,7 @@ static int addExpansions(
             uint32_t const child_id = addRule(graph, rule_tbl, line_begin, line_sz, i);
             if (child_id == INVALID_UINT32) return GRAMMAR_SYNTAX_ERROR;
 
-            exp                 = addIndeterminate_alist(graph->exp_list);
+            exp                 = (ExpansionTerm*)addIndeterminate_alist(graph->exp_list);
             exp->is_terminal    = 0;
             exp->rt_id          = child_id;
             exp->cov_count      = 0;
@@ -110,7 +110,7 @@ static int addExpansions(
             uint32_t const terminal_id = addTerminal(graph, terminal_tbl, line_begin, line_sz, i);
             if (terminal_id == INVALID_UINT32) return GRAMMAR_SYNTAX_ERROR;
 
-            exp                 = addIndeterminate_alist(graph->exp_list);
+            exp                 = (ExpansionTerm*)addIndeterminate_alist(graph->exp_list);
             exp->is_terminal    = 1;
             exp->rt_id          = terminal_id;
             exp->cov_count      = 0;
@@ -162,7 +162,7 @@ static uint32_t addRule(
 
     mapping = searchInsert_ctbl(&ins_result, rule_tbl, term, graph->rule_list->len, CTBL_MODE_INSERT_RESPECT);
     if (ins_result == CTBL_RESPECT_UNIQUE) {
-        RuleTerm* const parent  = addIndeterminate_alist(graph->rule_list);
+        RuleTerm* const parent  = (RuleTerm*)addIndeterminate_alist(graph->rule_list);
         parent->name_id         = LEN_CHUNK(graph->rule_names) - 1;
         parent->cov_count       = 0;
         parent->alt_list[0]     = NOT_AN_ALIST;
@@ -254,7 +254,7 @@ void destruct_ggraph(GrammarGraph* const graph) {
     destruct_chunk(graph->rule_names);
     destruct_chunk(graph->terminals);
 
-    rule = getFirst_alist(graph->rule_list);
+    rule = (RuleTerm*)getFirst_alist(graph->rule_list);
     REPEAT(graph->rule_list->len) {
         destruct_alist(rule->alt_list);
         rule++;
@@ -300,10 +300,10 @@ void fillCovMtx_ggraph(
     assert(isValid_ggraph(graph));
     assert(rule_id < graph->rule_list->len);
 
-    rule        = get_alist(graph->rule_list, rule_id);
-    p_exp_id    = getFirst_alist(rule->alt_list);
+    rule        = (RuleTerm const*)get_alist(graph->rule_list, rule_id);
+    p_exp_id    = (uint32_t const*)getFirst_alist(rule->alt_list);
     for (uint32_t alt_id = 0; alt_id < rule->alt_list->len; alt_id++) {
-        exp = get_alist(graph->exp_list, *(p_exp_id++));
+        exp = (ExpansionTerm const*)get_alist(graph->exp_list, *(p_exp_id++));
         if (exp->cov_count == 0)
             unset_bmtx(cov_mtx, 0, alt_id);
         else
@@ -331,16 +331,16 @@ void generateSentence_ggraph(
     assert(isValid_alist(seq));
     assert(seq->len > 0);
 
-    p_decision  = getFirst_alist(seq);
-    rule        = get_alist(graph->rule_list, graph->root_rule_id);
+    p_decision  = (uint32_t const*)getFirst_alist(seq);
+    rule        = (RuleTerm*)get_alist(graph->rule_list, graph->root_rule_id);
     if (rule->cov_count == 0)       graph->n_cov++;
     if (rule->cov_count < SZ32_MAX) rule->cov_count++;
 
     constructEmpty_alist(stack, sizeof(ExpansionTerm*), ALIST_RECOMMENDED_INITIAL_CAP);
     addIndeterminate_chunk(str_builder, 0);
 
-    p_exp_id    = get_alist(rule->alt_list, *(p_decision++));
-    exp         = get_alist(graph->exp_list, *p_exp_id);
+    p_exp_id    = (uint32_t const*)get_alist(rule->alt_list, *(p_decision++));
+    exp         = (ExpansionTerm*)get_alist(graph->exp_list, *p_exp_id);
     n_exps      = 1;
     while ((exp++)->has_next) n_exps++;
     REPEAT(n_exps) { exp--; push_alist(stack, &exp); }
@@ -355,12 +355,12 @@ void generateSentence_ggraph(
             terminal = get_chunk(graph->terminals, exp->rt_id);
             appendLast_chunk(str_builder, terminal.p, terminal.sz);
         } else {
-            rule = get_alist(graph->rule_list, exp->rt_id);
+            rule = (RuleTerm*)get_alist(graph->rule_list, exp->rt_id);
             if (rule->cov_count == 0)       graph->n_cov++;
             if (rule->cov_count < SZ32_MAX) rule->cov_count++;
 
-            p_exp_id    = get_alist(rule->alt_list, *(p_decision++));
-            exp         = get_alist(graph->exp_list, *p_exp_id);
+            p_exp_id    = (uint32_t const*)get_alist(rule->alt_list, *(p_decision++));
+            exp         = (ExpansionTerm*)get_alist(graph->exp_list, *p_exp_id);
             n_exps      = 1;
             while ((exp++)->has_next) n_exps++;
             REPEAT(n_exps) { exp--; push_alist(stack, &exp); }
@@ -398,7 +398,7 @@ static int load_ggraph(
 
     for (uint32_t line_id = 0; line_id < LEN_CHUNK(lines); line_id++) {
         Item const line                 = get_chunk(lines, line_id);
-        char const* const line_begin    = line.p;
+        char const* const line_begin    = (char const*)line.p;
         uint32_t i                      = 0;
 
         load_res = skipSpaces(line_begin, line.sz, &i);
@@ -449,7 +449,7 @@ void printDot_ggraph(
         "\n"
     );
     for (uint32_t rule_id = 0; rule_id < graph->rule_list->len; rule_id++) {
-        RuleTerm const* const rule  = get_alist(graph->rule_list, rule_id);
+        RuleTerm const* const rule  = (RuleTerm const*)get_alist(graph->rule_list, rule_id);
         Item const rule_name        = get_chunk(graph->rule_names, rule->name_id);
 
         fprintf(output,
@@ -463,11 +463,11 @@ void printDot_ggraph(
             fprintf(output, ",style=\"filled\"];\n");
     }
     for (uint32_t rule_id = 0; rule_id < graph->rule_list->len; rule_id++) {
-        RuleTerm const* const rule  = get_alist(graph->rule_list, rule_id);
-        uint32_t const* p_exp_id    = getFirst_alist(rule->alt_list);
+        RuleTerm const* const rule  = (RuleTerm const*)get_alist(graph->rule_list, rule_id);
+        uint32_t const* p_exp_id    = (uint32_t const*)getFirst_alist(rule->alt_list);
 
         for (uint32_t alt_id = 0; alt_id < rule->alt_list->len; alt_id++) {
-            ExpansionTerm const* exp    = get_alist(graph->exp_list, *(p_exp_id++));
+            ExpansionTerm const* exp    = (ExpansionTerm const*)get_alist(graph->exp_list, *(p_exp_id++));
             uint32_t port_id            = 0;
             bool is_covered             = 0;
 
@@ -482,7 +482,7 @@ void printDot_ggraph(
                         (int)terminal.sz, (char*)terminal.p
                     );
                 } else {
-                    RuleTerm const* const child = get_alist(graph->rule_list, exp->rt_id);
+                    RuleTerm const* const child = (RuleTerm const*)get_alist(graph->rule_list, exp->rt_id);
                     Item const child_name       = get_chunk(graph->rule_names, child->name_id);
                     fprintf(
                         output,
@@ -502,11 +502,11 @@ void printDot_ggraph(
         }
     }
     for (uint32_t rule_id = 0; rule_id < graph->rule_list->len; rule_id++) {
-        RuleTerm const* const rule  = get_alist(graph->rule_list, rule_id);
-        uint32_t const* p_exp_id    = getFirst_alist(rule->alt_list);
+        RuleTerm const* const rule  = (RuleTerm const*)get_alist(graph->rule_list, rule_id);
+        uint32_t const* p_exp_id    = (uint32_t const*)getFirst_alist(rule->alt_list);
 
         for (uint32_t alt_id = 0; alt_id < rule->alt_list->len; alt_id++) {
-            ExpansionTerm const* exp    = get_alist(graph->exp_list, *(p_exp_id++));
+            ExpansionTerm const* exp    = (ExpansionTerm const*)get_alist(graph->exp_list, *(p_exp_id++));
             uint32_t port_id            = 0;
 
             fprintf(

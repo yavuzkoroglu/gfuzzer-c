@@ -269,7 +269,7 @@ int main(
     size_t pre_filename_len         = 0;
     char* root_str                  = NULL;
     size_t root_len                 = 0;
-    bool* const is_arg_processed    = mem_calloc((size_t)argc, sizeof(bool));
+    bool* const is_arg_processed    = (bool*)mem_calloc((size_t)argc, sizeof(bool));
     bool cov_guided                 = DEFAULT_COV_GUIDED;
     bool unique                     = DEFAULT_UNIQUE;
     uint32_t min_depth              = DEFAULT_MIN_DEPTH;
